@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 from time import monotonic_ns
 from typing import Any
@@ -134,7 +135,7 @@ class RobustMicrophoneSource:
 
     def _open_stream(self, device_id: int | str | None, label: str) -> None:
         is_loopback = False
-        if device_id is not None and not isinstance(device_id, str) and not self._config.IS_MAC:
+        if device_id is not None and not isinstance(device_id, str) and sys.platform != "darwin":
             try:
                 import pyaudiowpatch as pyaudio
                 p = pyaudio.PyAudio()
