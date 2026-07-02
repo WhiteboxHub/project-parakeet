@@ -400,26 +400,28 @@ class DhwaniSTTProvider:
             deepgram_key=deepgram_key,
         )
 
-        async def handler_callback(raw_text: str):
+        async def handler_callback(raw_text: str, is_final: bool = True):
             if not raw_text:
                 return
 
-            print(f"[dhwani] handler_callback raw text received: '{raw_text}'")
-            
+            print(f"[dhwani] handler_callback raw text received (is_final={is_final}): '{raw_text}'")
+
             # Emit raw text as partial transcript immediately
-            if self._callback:
-                print(f"[dhwani] Emitting partial transcript: '{raw_text}'")
-                partial_latency = ((monotonic_ns() - self._started_at_ns) / 1_000_000) if self._started_at_ns > 0 else 0.0
-                self._callback(
-                    Transcript(
-                        text=raw_text,
-                        is_final=False,
-                        utterance_id=self._utterance_id or "dhwani-utterance",
-                        started_at_ns=self._started_at_ns,
-                        provider="dhwani",
-                        latency_ms=partial_latency
+            if not is_final:
+                if self._callback:
+                    print(f"[dhwani] Emitting partial transcript: '{raw_text}'")
+                    partial_latency = ((monotonic_ns() - self._started_at_ns) / 1_000_000) if self._started_at_ns > 0 else 0.0
+                    self._callback(
+                        Transcript(
+                            text=raw_text,
+                            is_final=False,
+                            utterance_id=self._utterance_id or "dhwani-utterance",
+                            started_at_ns=self._started_at_ns,
+                            provider="dhwani",
+                            latency_ms=partial_latency
+                        )
                     )
-                )
+                return
 
             # Update context history
             self._raw_transcript_history = (self._raw_transcript_history + " " + raw_text)[-2000:]

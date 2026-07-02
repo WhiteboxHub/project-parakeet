@@ -26,22 +26,22 @@ class DeepgramProvider(STTProvider):
                 encoding="linear16", # Tells Deepgram we stream raw PCM
                 sample_rate=16000,
                 channels=1,
-                interim_results=False,
+                interim_results=True,
                 endpointing=250,
                 language="en",
                 keyterm=["LangChain", "LangGraph", "land graph", "Landra", "MilvusDB", "BM25", "Agentic AI", "Agentic", "RAG", "Prometheus", "Grafana", "CloudWatch"]
             ) as connection:
 
                 def on_message(*args, **kwargs):
-                    # Handler receives (self, message) or just (message,)
                     message = args[1] if len(args) > 1 else args[0]
                     try:
                         if hasattr(message, "channel") and hasattr(message.channel, "alternatives"):
                             sentence = message.channel.alternatives[0].transcript
                             if sentence and sentence.strip():
                                 print(f"Deepgram raw text: {sentence}")
+                                is_final = getattr(message, "is_final", False)
                                 asyncio.run_coroutine_threadsafe(
-                                    handler_callback(sentence), loop
+                                    handler_callback(sentence, is_final), loop
                                 )
                     except Exception as e:
                         print(f"Deepgram message parse error: {e}")
