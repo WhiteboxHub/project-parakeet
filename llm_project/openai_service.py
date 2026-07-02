@@ -292,6 +292,10 @@ def generate_answer(
         nonlocal winner_provider, final_raw_text
         try:
             print(f"[openai_service] Racing: {provider_name} call started...", flush=True)
+            if is_cancelled and is_cancelled():
+                result_queue.put(None)
+                return
+
             resp = client_obj.chat.completions.create(
                 model=model_name,
                 messages=messages,
@@ -303,6 +307,7 @@ def generate_answer(
             accumulated_text = ""
             for chunk in resp:
                 if is_cancelled and is_cancelled():
+                    result_queue.put(None)
                     return
 
                 if not chunk.choices or not chunk.choices[0].delta.content:
@@ -317,6 +322,7 @@ def generate_answer(
                         print(f"[openai_service] Racing: {provider_name} won the race!", flush=True)
 
                     if winner_provider != provider_name:
+                        result_queue.put(None)
                         return  # lost race, abort
 
                 # If we won, notify on_chunk and update final text
@@ -417,7 +423,9 @@ def generate_answer(
             raw = res[1]
         else:
             with errors_lock:
-                raise errors[0][1]
+                if errors:
+                    raise errors[0][1]
+            raw = ""
 
     return parse_structured_response(raw, coding)
 
