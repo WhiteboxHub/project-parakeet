@@ -55,7 +55,7 @@ def stylesheet(*, transparent: bool = True) -> str:
     QMainWindow, QWidget {{ background: transparent; }}
     #drag_strip {{
         background-color: {strip};
-        border: 1px solid {c["border"]};
+        border: 2px solid #000000;
         border-radius: 10px;
     }}
     #drag_strip:hover {{ background-color: {c["hover"]}; }}
