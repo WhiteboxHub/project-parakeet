@@ -164,6 +164,10 @@ class OverlayWindow(QMainWindow):
         self._layout_mode = "normal"
         self._saved_normal_geometry: QRect | None = None
         self._code_box_max_default = 200
+        self.setMouseTracking(True)
+        self._resize_dir = None
+        self._resize_start_pos = None
+        self._resize_start_geom = None
         self._setup_ui()
         self.installEventFilter(self)
         self.answer_ready.connect(self._set_response)
@@ -466,6 +470,84 @@ class OverlayWindow(QMainWindow):
                 event.accept()
                 return
         super().wheelEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = event.position().toPoint()
+            border = 8
+            w = self.width()
+            h = self.height()
+
+            left = pos.x() < border
+            right = pos.x() > w - border
+            top = pos.y() < border
+            bottom = pos.y() > h - border
+
+            direction = ""
+            if left: direction += "L"
+            if right: direction += "R"
+            if top: direction += "T"
+            if bottom: direction += "B"
+
+            if direction:
+                self._resize_dir = direction
+                self._resize_start_pos = event.globalPosition().toPoint()
+                self._resize_start_geom = self.geometry()
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        pos = event.position().toPoint()
+        border = 8
+        w = self.width()
+        h = self.height()
+
+        if not event.buttons() & Qt.MouseButton.LeftButton:
+            left = pos.x() < border
+            right = pos.x() > w - border
+            top = pos.y() < border
+            bottom = pos.y() > h - border
+
+            if (left and top) or (right and bottom):
+                self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+            elif (right and top) or (left and bottom):
+                self.setCursor(Qt.CursorShape.SizeBDiagCursor)
+            elif left or right:
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
+            elif top or bottom:
+                self.setCursor(Qt.CursorShape.SizeVerCursor)
+            else:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+        elif self._resize_dir:
+            delta = event.globalPosition().toPoint() - self._resize_start_pos
+            geom = QRect(self._resize_start_geom)
+            min_w = self.minimumWidth()
+            min_h = self.minimumHeight()
+
+            if "L" in self._resize_dir:
+                new_w = max(min_w, geom.width() - delta.x())
+                geom.setLeft(geom.right() - new_w + 1)
+            if "R" in self._resize_dir:
+                new_w = max(min_w, geom.width() + delta.x())
+                geom.setWidth(new_w)
+            if "T" in self._resize_dir:
+                new_h = max(min_h, geom.height() - delta.y())
+                geom.setTop(geom.bottom() - new_h + 1)
+            if "B" in self._resize_dir:
+                new_h = max(min_h, geom.height() + delta.y())
+                geom.setHeight(new_h)
+
+            self.setGeometry(geom)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        self._resize_dir = None
+        self._resize_start_pos = None
+        self._resize_start_geom = None
+        super().mouseReleaseEvent(event)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
