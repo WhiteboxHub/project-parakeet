@@ -365,15 +365,16 @@ class OverlayWindow(QMainWindow):
             widget.setAutoFillBackground(False)
 
     def _make_see_through_edit(self, edit: QTextEdit | QPlainTextEdit) -> None:
-        """Force text areas to have a semi-transparent dark backplate for high contrast on any background."""
+        """Force text areas transparent with a strong text outline/halo so it works on any background."""
         self._make_translucent_widget(edit)
         pal = edit.palette()
-        pal.setColor(QPalette.ColorRole.Base, QColor(10, 10, 12, 170))
+        pal.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0, 0))
         pal.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
         edit.setPalette(pal)
         edit.setStyleSheet(
-            "background-color: rgba(10, 10, 12, 170); border: 1px solid rgba(255, 255, 255, 45); border-radius: 10px;"
+            "background: transparent; background-color: transparent; border: none; color: #FFFFFF;"
         )
+        self._apply_text_halo(edit)
 
     def _apply_stealth_focus(self, central: QWidget) -> None:
         """Hover + wheel scroll without focusing the overlay (keeps coding tab active)."""
@@ -414,11 +415,11 @@ class OverlayWindow(QMainWindow):
 
     @staticmethod
     def _apply_text_halo(widget: QWidget) -> None:
-        """Shadow so white copilot text stays readable over background bleed-through."""
+        """Strong black shadow/halo so white copilot text stays readable on any background."""
         fx = QGraphicsDropShadowEffect(widget)
-        fx.setBlurRadius(6)
-        fx.setOffset(0, 1)
-        fx.setColor(QColor(0, 0, 0, 160))
+        fx.setBlurRadius(8)
+        fx.setOffset(0, 0)
+        fx.setColor(QColor(0, 0, 0, 255))
         widget.setGraphicsEffect(fx)
 
     @staticmethod

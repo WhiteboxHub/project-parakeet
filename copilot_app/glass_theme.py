@@ -75,7 +75,7 @@ def stylesheet(*, transparent: bool = True) -> str:
     QLabel {{ color: {TEXT}; font-size: 15px; background: transparent; }}
     QTextEdit, QPlainTextEdit {{
         background: transparent;
-        background-color: rgba(10, 10, 12, 170);
+        background-color: transparent;
         color: {TEXT};
         font-size: 17px;
         border: 1px solid rgba(255, 255, 255, 45);
