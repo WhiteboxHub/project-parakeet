@@ -375,38 +375,49 @@ def generate_answer(
         run_stream("local", local_client, fallback_model)
 
     global _use_local_fallback_directly
-    if _use_local_fallback_directly or getattr(config, "USE_LOCAL_LLM", False):
-        print("[openai_service] Local fallback or USE_LOCAL_LLM active. Running local only.", flush=True)
-        run_local()
-        res = result_queue.get()
-        if res is not None:
-            raw = res[1]
-        else:
-            print("[openai_service] Local failed, trying OpenAI as last resort...", flush=True)
-            run_openai()
-            res = result_queue.get()
-            if res is not None:
-                raw = res[1]
-            else:
-                raise errors[0][1]
-    else:
-        t_openai = threading.Thread(target=run_openai, daemon=True)
-        t_local = threading.Thread(target=run_local, daemon=True)
-        t_openai.start()
-        t_local.start()
+    use_local = getattr(config, "USE_LOCAL_LLM", False)
 
-        # Wait for the winner to finish
-        res = result_queue.get()
-        if res is not None:
-            raw = res[1]
-        else:
-            # Try the other provider if one failed
+    if use_local:
+        if _use_local_fallback_directly:
+            print("[openai_service] Local fallback active. Running local only.", flush=True)
+            run_local()
             res = result_queue.get()
             if res is not None:
                 raw = res[1]
             else:
-                with errors_lock:
-                    raise RuntimeError(f"Both OpenAI and Local LLM failed. Errors: {errors}")
+                print("[openai_service] Local failed, trying OpenAI as last resort...", flush=True)
+                run_openai()
+                res = result_queue.get()
+                if res is not None:
+                    raw = res[1]
+                else:
+                    raise errors[0][1]
+        else:
+            t_openai = threading.Thread(target=run_openai, daemon=True)
+            t_local = threading.Thread(target=run_local, daemon=True)
+            t_openai.start()
+            t_local.start()
+
+            # Wait for the winner to finish
+            res = result_queue.get()
+            if res is not None:
+                raw = res[1]
+            else:
+                # Try the other provider if one failed
+                res = result_queue.get()
+                if res is not None:
+                    raw = res[1]
+                else:
+                    with errors_lock:
+                        raise RuntimeError(f"Both OpenAI and Local LLM failed. Errors: {errors}")
+    else:
+        run_openai()
+        res = result_queue.get()
+        if res is not None:
+            raw = res[1]
+        else:
+            with errors_lock:
+                raise errors[0][1]
 
     return parse_structured_response(raw, coding)
 
@@ -459,8 +470,9 @@ def solve_from_screenshot(
     except Exception as exc:
         err_str = str(exc).lower()
         if "quota" in err_str or "limit" in err_str or "429" in err_str or "insufficient" in err_str:
-            _use_local_fallback_directly = True
-            print(f"[openai_service] OpenAI quota limit hit during vision scan. Checking local models...", flush=True)
+            if getattr(config, "USE_LOCAL_LLM", False):
+                _use_local_fallback_directly = True
+                print(f"[openai_service] OpenAI quota limit hit during vision scan. Checking local models...", flush=True)
             try:
                 fallback_model = "qwen3:8b"
                 has_vision = False
