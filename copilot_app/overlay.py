@@ -58,6 +58,12 @@ class _DragStrip(QWidget):
         row.addWidget(grip)
 
     def paintEvent(self, event) -> None:
+        from PyQt6.QtWidgets import QStyleOption, QStyle
+        opt = QStyleOption()
+        opt.initFrom(self)
+        painter = QPainter(self)
+        self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, opt, painter, self)
+
         # Fully transparent pixels can be click-through on Windows layered
         # windows. Alpha 1 is invisible but keeps the whole strip hit-testable.
         alpha = (
@@ -65,10 +71,8 @@ class _DragStrip(QWidget):
             if config.GLASS_SEE_THROUGH and config.GLASS_PANEL_TINT_PERCENT <= 1
             else 12
         )
-        painter = QPainter(self)
         painter.fillRect(self.rect(), QColor(255, 255, 255, alpha))
         painter.end()
-        super().paintEvent(event)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
