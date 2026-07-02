@@ -291,7 +291,7 @@ class OverlayWindow(QMainWindow):
         self.code_box = QPlainTextEdit()
         self.code_box.setReadOnly(True)
         self._make_see_through_edit(self.code_box)
-        mono = QFont("Menlo" if config.IS_MAC else "Consolas", 13)
+        mono = QFont("Menlo" if config.IS_MAC else "Consolas", 16)
         self.code_box.setFont(mono)
         self.code_box.setMaximumHeight(200)
         csl.addWidget(self.code_box)
@@ -343,7 +343,7 @@ class OverlayWindow(QMainWindow):
         else:
             self._apply_panel_shadow(central)
         self.setStyleSheet(glass_stylesheet(transparent=self._transparent))
-        QApplication.setFont(QFont("Segoe UI" if config.IS_WINDOWS else ".AppleSystemUIFont", 12))
+        QApplication.setFont(QFont("Segoe UI" if config.IS_WINDOWS else ".AppleSystemUIFont", 14))
 
         QShortcut(QKeySequence("Ctrl+H"), self, self.hide)
         QShortcut(QKeySequence("Ctrl+Shift+H"), self, self._show_and_exclude)

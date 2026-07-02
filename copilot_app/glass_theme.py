@@ -59,7 +59,7 @@ def stylesheet(*, transparent: bool = True) -> str:
         border-radius: 10px;
     }}
     #drag_strip:hover {{ background-color: {c["hover"]}; }}
-    #drag_grip {{ color: {TEXT}; font-size: 11px; background: transparent; }}
+    #drag_grip {{ color: {TEXT}; font-size: 13px; background: transparent; }}
     #resize_grip {{ background: transparent; border: none; }}
     #panel {{
         background-color: {panel};
@@ -67,17 +67,17 @@ def stylesheet(*, transparent: bool = True) -> str:
         border-radius: 16px;
     }}
     #title {{
-        color: {TEXT}; font-size: 18px; font-weight: 700; background: transparent;
+        color: {TEXT}; font-size: 21px; font-weight: 700; background: transparent;
     }}
-    #status {{ color: {TEXT_MUTED}; font-size: 13px; background: transparent; }}
-    #section {{ color: {TEXT}; font-size: 12px; font-weight: 600; background: transparent; }}
-    #hint {{ color: {TEXT_HINT}; font-size: 11px; background: transparent; }}
-    QLabel {{ color: {TEXT}; font-size: 13px; background: transparent; }}
+    #status {{ color: {TEXT_MUTED}; font-size: 15px; background: transparent; }}
+    #section {{ color: {TEXT}; font-size: 14px; font-weight: 600; background: transparent; }}
+    #hint {{ color: {TEXT_HINT}; font-size: 13px; background: transparent; }}
+    QLabel {{ color: {TEXT}; font-size: 15px; background: transparent; }}
     QTextEdit, QPlainTextEdit {{
         background: transparent;
         background-color: transparent;
         color: {TEXT};
-        font-size: 14px;
+        font-size: 17px;
         border: 1px solid {c["border"]};
         border-radius: 10px;
         padding: 10px;
@@ -90,7 +90,7 @@ def stylesheet(*, transparent: bool = True) -> str:
         border: 1px solid {c["border"]};
         border-radius: 18px;
         padding: 8px 16px;
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 600;
     }}
     QPushButton#primary:hover {{ background-color: rgba(0, 0, 0, 160); }}
@@ -100,7 +100,7 @@ def stylesheet(*, transparent: bool = True) -> str:
         border: 1px solid {c["border"]};
         border-radius: 18px;
         padding: 8px 14px;
-        font-size: 12px;
+        font-size: 14px;
     }}
     QPushButton#ghost:hover {{ background-color: rgba(0, 0, 0, 120); }}
     QPushButton#ghost:checked {{
@@ -113,7 +113,7 @@ def stylesheet(*, transparent: bool = True) -> str:
         color: {TEXT};
         border: none;
         border-radius: 14px;
-        font-size: 17px;
+        font-size: 19px;
         font-weight: bold;
         padding: 0;
     }}
