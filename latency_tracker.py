@@ -2,10 +2,12 @@ import time
 from pathlib import Path
 
 class LatencyTracker:
-    def __init__(self, filepath="latency_report.md"):
+    def __init__(self, filepath="latency_report.md", dialogue_filepath="interview_transcript.md"):
         self.filepath = Path(filepath)
+        self.dialogue_filepath = Path(dialogue_filepath)
         self.stt_events = [] # list of dicts: {"timestamp": float, "text": str, "latency_ms": float, "is_final": bool}
         self.llm_events = [] # list of dicts: {"timestamp": float, "text": str, "ttft_ms": float, "tgt_ms": float}
+        self.dialogue_events = [] # list of dicts: {"timestamp": float, "role": str, "text": str}
 
     def record_stt(self, text: str, is_final: bool, latency_ms: float):
         text = text.strip()
@@ -29,9 +31,18 @@ class LatencyTracker:
             })
             self.generate_report()
 
+    def record_dialogue(self, role: str, text: str):
+        text = text.strip()
+        if text:
+            self.dialogue_events.append({
+                "timestamp": time.time(),
+                "role": role,
+                "text": text
+            })
+            self.generate_dialogue_report()
+
     def generate_report(self):
         try:
-            # Resolve absolute path to report in the workspace root
             with open(self.filepath, "w", encoding="utf-8") as f:
                 f.write("# Latency Analysis Report\n\n")
                 f.write(f"*Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}*\n\n")
@@ -79,6 +90,21 @@ class LatencyTracker:
                         f.write(f"| {ts} | `{e['text'][:60]}...` | {ttft_str} | {e['tgt_ms']/1000:.2f} s ({e['tgt_ms']:.1f} ms) |\n")
         except Exception as e:
             print(f"Error writing latency report: {e}")
+
+    def generate_dialogue_report(self):
+        try:
+            with open(self.dialogue_filepath, "w", encoding="utf-8") as f:
+                f.write("# Interview Transcript & Roleplay Log\n\n")
+                f.write(f"*Last updated: {time.strftime('%Y-%m-%d %H:%M:%S')}*\n\n")
+                
+                f.write("| Timestamp | Role | Transcript |\n")
+                f.write("| :--- | :--- | :--- |\n")
+                for e in self.dialogue_events:
+                    ts = time.strftime('%H:%M:%S', time.localtime(e['timestamp']))
+                    role_str = f"**{e['role']}**"
+                    f.write(f"| {ts} | {role_str} | {e['text']} |\n")
+        except Exception as e:
+            print(f"Error writing dialogue report: {e}")
 
 # Global instance
 tracker = LatencyTracker()

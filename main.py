@@ -472,6 +472,7 @@ class InterviewApp:
         if is_final:
             from latency_tracker import tracker
             tracker.record_stt(text, is_final, latency_ms)
+            tracker.record_dialogue("Interviewer", text)
 
         if self._busy and self._last_final_question:
             display_text = f"{self._last_final_question}\nFollow-up: {text}"
@@ -531,6 +532,9 @@ class InterviewApp:
 
         if not is_final:
             return
+
+        from latency_tracker import tracker
+        tracker.record_dialogue("Candidate", text)
 
         with self._generation_lock:
             self.conversation.append({"role": "assistant", "content": text})
