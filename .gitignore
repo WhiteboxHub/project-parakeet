@@ -1,0 +1,22 @@
+# Virtual Environment
+venv/
+
+# Environment Configurations
+.env
+copilot_app/.env
+
+# Python Build / Cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Audio files
+*.wav
+*.mp3
+*.webm
+
+# OS files
+.DS_Store
+Thumbs.db
