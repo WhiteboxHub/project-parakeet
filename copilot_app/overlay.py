@@ -185,6 +185,10 @@ class OverlayWindow(QMainWindow):
             self._exclude_slow.timeout.connect(self._apply_exclude_once)
             self._exclude_slow.start(config.EXCLUDE_REFRESH_SEC * 1000)
 
+        self._contrast_timer = QTimer(self)
+        self._contrast_timer.timeout.connect(self._check_screen_contrast)
+        self._contrast_timer.start(2000)
+
     def _setup_ui(self) -> None:
         self.setWindowTitle("Interview Copilot")
         flags = (
@@ -843,6 +847,55 @@ class OverlayWindow(QMainWindow):
 
     def get_last_question(self) -> str:
         return self._last_question
+
+    def _check_screen_contrast(self) -> None:
+        """Lightweight background contrast sampler that updates text color mode dynamically."""
+        try:
+            screen = QGuiApplication.primaryScreen()
+            if not screen:
+                return
+
+            geom = self.geometry()
+            pixmap = screen.grabWindow(0, geom.x(), geom.y(), geom.width(), geom.height())
+            image = pixmap.toImage()
+
+            brightness_sum = 0.0
+            count = 0
+            step_x = max(1, geom.width() // 10)
+            step_y = max(1, geom.height() // 10)
+            for x in range(0, geom.width(), step_x):
+                for y in range(0, geom.height(), step_y):
+                    color = image.pixelColor(x, y)
+                    luminance = 0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()
+                    brightness_sum += luminance
+                    count += 1
+
+            if count > 0:
+                avg = brightness_sum / count
+                self.set_text_color_mode(is_light_bg=(avg > 140))
+        except Exception:
+            pass
+
+    def set_text_color_mode(self, is_light_bg: bool) -> None:
+        """Dynamically update the text color and black/white shadow outlines."""
+        color_str = "#000000" if is_light_bg else "#FFFFFF"
+        shadow_color = QColor(255, 255, 255, 255) if is_light_bg else QColor(0, 0, 0, 255)
+
+        for box in (self.question_box, self.answer_box, self.code_box):
+            box.setStyleSheet(
+                f"background: transparent; background-color: transparent; border: none; color: {color_str};"
+            )
+            fx = box.graphicsEffect()
+            if isinstance(fx, QGraphicsDropShadowEffect):
+                fx.setColor(shadow_color)
+
+        label_style = f"background: transparent; color: {color_str};"
+        for lbl in self.findChildren(QLabel):
+            if lbl.objectName() in ("title", "section", "hint") or isinstance(lbl, QLabel):
+                lbl.setStyleSheet(label_style)
+                fx = lbl.graphicsEffect()
+                if isinstance(fx, QGraphicsDropShadowEffect):
+                    fx.setColor(shadow_color)
 
     # Back-compat for main.py
     def ensure_invisible_to_share(self) -> None:
