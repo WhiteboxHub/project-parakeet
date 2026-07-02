@@ -52,7 +52,7 @@ class WorkerBridge(QObject):
     jpeg_ready = pyqtSignal(bytes, str)
     watch_jpeg_ready = pyqtSignal(bytes, bool)
     coding_busy = pyqtSignal(bool)
-    transcript = pyqtSignal(str, bool)
+    transcript = pyqtSignal(str, bool, float)
     candidate_transcript = pyqtSignal(str, bool)
     listening_state = pyqtSignal(bool)
 
@@ -323,6 +323,7 @@ class InterviewApp:
                     self.bridge.transcript.emit(
                         event.transcript.text,
                         event.transcript.is_final,
+                        event.transcript.latency_ms or 0.0,
                     )
                 elif event.kind == EventKind.DEVICE_CHANGED:
                     self.bridge.status.emit(f"Interviewer mic: {event.message}")
@@ -397,6 +398,7 @@ class InterviewApp:
                     self.bridge.transcript.emit(
                         event.transcript.text,
                         event.transcript.is_final,
+                        event.transcript.latency_ms or 0.0,
                     )
                 elif event.kind == EventKind.DEVICE_CHANGED:
                     self.bridge.status.emit(f"Interviewer mic: {event.message}")
@@ -462,10 +464,14 @@ class InterviewApp:
             return
         self.bridge.status.emit("Role-based audio listening started")
 
-    def _on_audio_transcript(self, text: str, is_final: bool) -> None:
+    def _on_audio_transcript(self, text: str, is_final: bool, latency_ms: float = 0.0) -> None:
         text = text.strip()
         if not text:
             return
+
+        if is_final:
+            from latency_tracker import tracker
+            tracker.record_stt(text, is_final, latency_ms)
 
         if self._busy and self._last_final_question:
             display_text = f"{self._last_final_question}\nFollow-up: {text}"
@@ -613,12 +619,18 @@ class InterviewApp:
                 if request_id < self._generation_request_id:
                     return
 
+                start_time = time.perf_counter()
+                ttft_ms = None
+
                 def is_cancelled():
                     return request_id < self._generation_request_id
 
                 def on_chunk(parsed_resp):
+                    nonlocal ttft_ms
                     if is_cancelled():
                         return
+                    if ttft_ms is None:
+                        ttft_ms = (time.perf_counter() - start_time) * 1000
                     self.bridge.answer.emit(parsed_resp)
 
                 response = generate_answer(
@@ -629,14 +641,18 @@ class InterviewApp:
                     is_cancelled=is_cancelled,
                 )
 
+                tgt_ms = (time.perf_counter() - start_time) * 1000
+
                 if request_id < self._generation_request_id:
-                    return
+                     return
 
                 if is_final:
                     self.conversation.append({"role": "user", "content": text})
                     self.conversation.append(
                         {"role": "assistant", "content": response.full_text}
                     )
+                    from latency_tracker import tracker
+                    tracker.record_llm(text, ttft_ms or tgt_ms, tgt_ms)
 
                 self.bridge.answer.emit(response)
                 self.bridge.status.emit("Ready — listening...")

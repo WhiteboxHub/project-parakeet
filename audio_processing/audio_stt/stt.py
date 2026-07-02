@@ -409,6 +409,7 @@ class DhwaniSTTProvider:
             # Emit raw text as partial transcript immediately
             if self._callback:
                 print(f"[dhwani] Emitting partial transcript: '{raw_text}'")
+                partial_latency = ((monotonic_ns() - self._started_at_ns) / 1_000_000) if self._started_at_ns > 0 else 0.0
                 self._callback(
                     Transcript(
                         text=raw_text,
@@ -416,7 +417,7 @@ class DhwaniSTTProvider:
                         utterance_id=self._utterance_id or "dhwani-utterance",
                         started_at_ns=self._started_at_ns,
                         provider="dhwani",
-                        latency_ms=0.0
+                        latency_ms=partial_latency
                     )
                 )
 
@@ -448,6 +449,7 @@ class DhwaniSTTProvider:
 
             if self._callback:
                 print(f"[dhwani] Emitting final transcript: '{cleaned_val}'", flush=True)
+                final_latency = ((monotonic_ns() - self._started_at_ns) / 1_000_000) if self._started_at_ns > 0 else 0.0
                 self._callback(
                     Transcript(
                         text=cleaned_val,
@@ -456,7 +458,7 @@ class DhwaniSTTProvider:
                         started_at_ns=self._started_at_ns,
                         ended_at_ns=monotonic_ns(),
                         provider="dhwani",
-                        latency_ms=0.0
+                        latency_ms=final_latency
                     )
                 )
 
