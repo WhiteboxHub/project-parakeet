@@ -30,7 +30,15 @@ def list_audio_devices() -> None:
 def _device_name(device_id: Optional[int]) -> str:
     if device_id is None:
         return "default microphone"
-    return sd.query_devices(device_id).get("name", f"device {device_id}")
+    try:
+        import pyaudiowpatch as pyaudio
+        p = pyaudio.PyAudio()
+        try:
+            return p.get_device_info_by_index(device_id).get("name", f"device {device_id}")
+        finally:
+            p.terminate()
+    except Exception:
+        return sd.query_devices(device_id).get("name", f"device {device_id}")
 
 
 def _probe_input_device(device_id: Optional[int]) -> bool:
@@ -94,9 +102,94 @@ def _windows_loopback_candidates() -> list[int]:
     return [i for _, i in ranked]
 
 
+class WasapiLoopbackStream:
+    def __init__(self, device_index, target_rate, target_blocksize, callback):
+        self.device_index = device_index
+        self.target_rate = target_rate
+        self.target_blocksize = target_blocksize
+        self.callback = callback
+        self.p = None
+        self.stream = None
+
+    def start(self):
+        import pyaudiowpatch as pyaudio
+        self.p = pyaudio.PyAudio()
+        device_info = self.p.get_device_info_by_index(self.device_index)
+        self.channels = device_info["maxInputChannels"]
+        self.native_rate = int(device_info["defaultSampleRate"])
+        self.native_blocksize = int(self.target_blocksize * self.native_rate / self.target_rate)
+
+        def py_callback(in_data, frame_count, time_info, status):
+            try:
+                samples = np.frombuffer(in_data, dtype=np.float32)
+                if self.channels > 1:
+                    samples = samples.reshape(-1, self.channels)
+                    samples = samples[:, 0]
+                
+                if self.native_rate == self.target_rate or samples.size == 0:
+                    standardized = samples
+                else:
+                    output_size = max(1, round(samples.size * self.target_rate / self.native_rate))
+                    source_x = np.arange(samples.size, dtype=np.float64)
+                    target_x = np.linspace(0, samples.size - 1, output_size, dtype=np.float64)
+                    standardized = np.interp(target_x, source_x, samples).astype(np.float32)
+
+                standardized = standardized.reshape(-1, 1)
+                self.callback(standardized, self.target_blocksize, None, None)
+            except Exception:
+                pass
+            return (None, pyaudio.paContinue)
+
+        self.stream = self.p.open(
+            format=pyaudio.paFloat32,
+            channels=self.channels,
+            rate=self.native_rate,
+            input=True,
+            input_device_index=self.device_index,
+            frames_per_buffer=self.native_blocksize,
+            stream_callback=py_callback
+        )
+        self.stream.start_stream()
+
+    def stop(self):
+        if self.stream:
+            try:
+                self.stream.stop_stream()
+                self.stream.close()
+            except Exception:
+                pass
+            self.stream = None
+        if self.p:
+            try:
+                self.p.terminate()
+            except Exception:
+                pass
+            self.p = None
+
+    def close(self):
+        self.stop()
+
+    def abort(self):
+        self.stop()
+
+
 def _find_loopback_device() -> Optional[int]:
     if config.IS_MAC:
         return _find_mac_virtual_input()
+
+    try:
+        import pyaudiowpatch as pyaudio
+        p = pyaudio.PyAudio()
+        try:
+            wasapi = p.get_host_api_info_by_type(pyaudio.paWASAPI)
+            default_speakers = p.get_device_info_by_index(wasapi['defaultOutputDevice'])
+            for dev in p.get_loopback_device_info_generator():
+                if default_speakers["name"] in dev["name"]:
+                    return dev["index"]
+        finally:
+            p.terminate()
+    except Exception:
+        pass
 
     for device_id in _windows_loopback_candidates():
         if _probe_input_device(device_id):
@@ -201,8 +294,18 @@ class SpeechRecorder:
             kwargs["device"] = self._device
         # Do NOT pass WasapiSettings on WDM-KS / Stereo Mix — it breaks the stream.
 
-        self._stream = sd.InputStream(**kwargs)
-        self._stream.start()
+        if self._loopback and not config.IS_MAC:
+            self._stream = WasapiLoopbackStream(
+                device_index=self._device,
+                target_rate=SAMPLE_RATE,
+                target_blocksize=FRAME_SAMPLES,
+                callback=callback
+            )
+            self._stream.start()
+        else:
+            self._stream = sd.InputStream(**kwargs)
+            self._stream.start()
+
         self._stop.clear()
         self._thread = threading.Thread(target=self._process_loop, daemon=True)
         self._thread.start()
@@ -215,8 +318,14 @@ class SpeechRecorder:
     def stop(self) -> None:
         self._stop.set()
         if self._stream:
-            self._stream.stop()
-            self._stream.close()
+            try:
+                self._stream.stop()
+            except Exception:
+                pass
+            try:
+                self._stream.close()
+            except Exception:
+                pass
             self._stream = None
         if self._thread:
             self._thread.join(timeout=20)

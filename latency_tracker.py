@@ -3,8 +3,9 @@ from pathlib import Path
 
 class LatencyTracker:
     def __init__(self, filepath="latency_report.md", dialogue_filepath="interview_transcript.md"):
-        self.filepath = Path(filepath)
-        self.dialogue_filepath = Path(dialogue_filepath)
+        root = Path(__file__).resolve().parent
+        self.filepath = root / filepath
+        self.dialogue_filepath = root / dialogue_filepath
         self.stt_events = [] # list of dicts: {"timestamp": float, "text": str, "latency_ms": float, "is_final": bool}
         self.llm_events = [] # list of dicts: {"timestamp": float, "text": str, "ttft_ms": float, "tgt_ms": float}
         self.dialogue_events = [] # list of dicts: {"timestamp": float, "role": str, "text": str}

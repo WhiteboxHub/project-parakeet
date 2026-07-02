@@ -133,6 +133,51 @@ class RobustMicrophoneSource:
                 backoff = min(backoff * 2.0, self._config.recovery_max_seconds)
 
     def _open_stream(self, device_id: int | str | None, label: str) -> None:
+        is_loopback = False
+        if device_id is not None and not isinstance(device_id, str) and not self._config.IS_MAC:
+            try:
+                import pyaudiowpatch as pyaudio
+                p = pyaudio.PyAudio()
+                try:
+                    dev_info = p.get_device_info_by_index(device_id)
+                    is_loopback = dev_info.get("isLoopbackDevice", False)
+                finally:
+                    p.terminate()
+            except Exception:
+                is_loopback = False
+
+        if is_loopback:
+            from audio_processing.audio_capture import WasapiLoopbackStream
+            assembler = _FrameAssembler(self._config.frame_samples)
+            
+            def callback(indata, _frames, time_info, status):
+                mono = np.asarray(indata[:, 0], dtype=np.float32).copy()
+                adc_ns = monotonic_ns()
+                if self._on_audio:
+                    for frame in assembler.push(mono):
+                        self._on_audio(frame, self._config.sample_rate, adc_ns)
+
+            stream = WasapiLoopbackStream(
+                device_index=device_id,
+                target_rate=self._config.sample_rate,
+                target_blocksize=self._config.frame_samples,
+                callback=callback
+            )
+            try:
+                stream.start()
+                with self._lock:
+                    self._stream = stream
+                    self._active_device = device_id
+                    self._device_label = label
+                log.info(
+                    "WASAPI Loopback stream opened: %s (%s Hz)",
+                    label,
+                    self._config.sample_rate
+                )
+                return
+            except Exception as exc:
+                raise RuntimeError(f"Unable to open WASAPI Loopback stream {label}: {exc}")
+
         info = sd.query_devices(device_id, "input")
         native_rate = int(round(float(info["default_samplerate"])))
         rates = [self._config.sample_rate]
