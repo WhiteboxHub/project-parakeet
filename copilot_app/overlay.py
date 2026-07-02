@@ -658,17 +658,21 @@ class OverlayWindow(QMainWindow):
         self.code_box.setMaximumHeight(self._code_box_max_default)
 
     def _set_response(self, response: ParsedResponse) -> None:
-        if response.is_coding or response.code:
+        if (response.is_coding or response.code) and self.btn_coding.isChecked():
             self.code_section.show()
             self.approach_label.setText("What to say (approach)")
             self.answer_box.setPlainText(response.approach or response.full_text)
             self.code_box.setPlainText(response.code)
-            self.btn_coding.setChecked(False)
             self.apply_coding_layout()
         else:
             self.code_section.hide()
             self.approach_label.setText("Suggested answer")
-            self.answer_box.setPlainText(response.full_text)
+            full_content = response.full_text
+            if response.code and not self.btn_coding.isChecked():
+                if "```" not in full_content:
+                    full_content += f"\n\nCode:\n```{config.CODE_LANGUAGE}\n{response.code}\n```"
+            self.answer_box.setPlainText(full_content)
+            self.btn_coding.setChecked(False)
             self.apply_normal_layout()
         self.schedule_exclude()
 
