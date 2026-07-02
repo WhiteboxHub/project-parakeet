@@ -65,7 +65,7 @@ class InterviewApp:
         self.app.setApplicationName("Interview Copilot")
         self.window = OverlayWindow()
         self.bridge = WorkerBridge()
-        self.executor = ThreadPoolExecutor(max_workers=config.MAX_WORKERS)
+        self.executor = ThreadPoolExecutor(max_workers=max(4, config.MAX_WORKERS))
         self.recorder: SpeechRecorder | None = None
         self.audio_pipeline: AudioToTextPipeline | None = None
         self.candidate_pipeline: AudioToTextPipeline | None = None
@@ -609,44 +609,46 @@ class InterviewApp:
                 return
 
             self._busy = True
-            try:
-                self.bridge.question.emit(text)
-                from openai_service import should_use_coding_mode
+            self.bridge.question.emit(text)
+            history = list(self.conversation) if include_history else []
 
-                force_coding = force_coding or text.strip().startswith("[Screen problem]")
-                coding = should_use_coding_mode(text, force_coding)
-                self.bridge.status.emit(
-                    f"Generating {'coding solution' if coding else 'answer'}..."
-                )
-                history = self.conversation if include_history else []
+        try:
+            from openai_service import should_use_coding_mode
 
-                if request_id < self._generation_request_id:
+            force_coding = force_coding or text.strip().startswith("[Screen problem]")
+            coding = should_use_coding_mode(text, force_coding)
+            self.bridge.status.emit(
+                f"Generating {'coding solution' if coding else 'answer'}..."
+            )
+
+            if request_id < self._generation_request_id:
+                return
+
+            start_time = time.perf_counter()
+            ttft_ms = None
+
+            def is_cancelled():
+                return request_id < self._generation_request_id
+
+            def on_chunk(parsed_resp):
+                nonlocal ttft_ms
+                if is_cancelled():
                     return
+                if ttft_ms is None:
+                    ttft_ms = (time.perf_counter() - start_time) * 1000
+                self.bridge.answer.emit(parsed_resp)
 
-                start_time = time.perf_counter()
-                ttft_ms = None
+            response = generate_answer(
+                text,
+                history,
+                force_coding,
+                on_chunk=on_chunk,
+                is_cancelled=is_cancelled,
+            )
 
-                def is_cancelled():
-                    return request_id < self._generation_request_id
+            tgt_ms = (time.perf_counter() - start_time) * 1000
 
-                def on_chunk(parsed_resp):
-                    nonlocal ttft_ms
-                    if is_cancelled():
-                        return
-                    if ttft_ms is None:
-                        ttft_ms = (time.perf_counter() - start_time) * 1000
-                    self.bridge.answer.emit(parsed_resp)
-
-                response = generate_answer(
-                    text,
-                    history,
-                    force_coding,
-                    on_chunk=on_chunk,
-                    is_cancelled=is_cancelled,
-                )
-
-                tgt_ms = (time.perf_counter() - start_time) * 1000
-
+            with self._generation_lock:
                 if request_id < self._generation_request_id:
                      return
 
@@ -660,13 +662,13 @@ class InterviewApp:
 
                 self.bridge.answer.emit(response)
                 self.bridge.status.emit("Ready — listening...")
-            except Exception as e:
-                self.bridge.error.emit(format_api_error(e))
-                traceback.print_exc()
-            finally:
-                self._busy = False
-                if force_coding:
-                    self.bridge.coding_busy.emit(False)
+        except Exception as e:
+            self.bridge.error.emit(format_api_error(e))
+            traceback.print_exc()
+        finally:
+            self._busy = False
+            if force_coding:
+                self.bridge.coding_busy.emit(False)
 
     def run(self) -> int:
         plat = "macOS" if config.IS_MAC else "Windows"
