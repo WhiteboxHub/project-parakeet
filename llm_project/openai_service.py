@@ -321,6 +321,9 @@ Use ASCII diagrams where appropriate.
 Candidate background (use for context matching):
 {resume}
 
+Candidate Self-Introduction:
+{intro}
+
 Target role: {role}
 {job_desc}
 """
@@ -374,6 +377,9 @@ Language for implementation: {lang}
 
 Candidate background:
 {resume}
+
+Candidate Self-Introduction:
+{intro}
 
 Target role: {role}
 {job_desc}
@@ -524,6 +530,7 @@ def generate_answer(
     coding = should_use_coding_mode(question, force_coding)
     client = _client()
     resume = config.load_resume_context() or "(No resume loaded — add resume_context.txt)"
+    intro = config.load_intro_context() or "(No self-introduction loaded — add intro_context.txt)"
     job_desc = ""
     if config.JOB_DESCRIPTION.strip():
         job_desc = f"Job focus:\n{config.JOB_DESCRIPTION.strip()}"
@@ -533,6 +540,7 @@ def generate_answer(
         system = CODING_PROMPT.format(
             lang=lang,
             resume=resume,
+            intro=intro,
             role=config.JOB_ROLE,
             job_desc=job_desc,
         )
@@ -545,6 +553,7 @@ def generate_answer(
     else:
         system = SYSTEM_PROMPT.format(
             resume=resume,
+            intro=intro,
             role=config.JOB_ROLE,
             job_desc=job_desc,
         )
@@ -714,6 +723,7 @@ def solve_from_screenshot(
     client = _client()
     lang = config.CODE_LANGUAGE
     resume = config.load_resume_context() or ""
+    intro = config.load_intro_context() or ""
     job_desc = config.JOB_DESCRIPTION.strip()
 
     b64 = base64.standard_b64encode(image_jpeg).decode("ascii")
@@ -721,6 +731,8 @@ def solve_from_screenshot(
     extra = ""
     if resume:
         extra += f"\nCandidate background:\n{resume[:2000]}"
+    if intro:
+        extra += f"\nCandidate Self-Introduction / Past Projects:\n{intro[:1000]}"
     if job_desc:
         extra += f"\nJob focus:\n{job_desc[:800]}"
 

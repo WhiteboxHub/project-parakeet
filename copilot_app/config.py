@@ -126,3 +126,23 @@ def load_resume_context() -> str:
     if RESUME_PATH.exists():
         return RESUME_PATH.read_text(encoding="utf-8").strip()
     return ""
+
+
+def intro_path() -> Path:
+    p = Path(_env("INTRO_CONTEXT_PATH", str(ROOT / "intro_context.txt")))
+    if not p.is_absolute():
+        p = ROOT / p
+    try:
+        p.resolve().relative_to(ROOT.resolve())
+    except ValueError:
+        p = ROOT / "intro_context.txt"
+    return p
+
+
+INTRO_PATH = intro_path()
+
+
+def load_intro_context() -> str:
+    if INTRO_PATH.exists():
+        return INTRO_PATH.read_text(encoding="utf-8").strip()
+    return ""

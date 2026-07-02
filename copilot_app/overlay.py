@@ -237,6 +237,11 @@ class OverlayWindow(QMainWindow):
         self.btn_resume.clicked.connect(self._on_resume_click)
         header.addWidget(self.btn_resume)
 
+        self.btn_intro = QPushButton("Intro")
+        self.btn_intro.setObjectName("ghost")
+        self.btn_intro.clicked.connect(self._on_intro_click)
+        header.addWidget(self.btn_intro)
+
         self.btn_listen = QPushButton("Start listening")
         self.btn_listen.setObjectName("primary")
         self.btn_listen.clicked.connect(self._on_listen_click)
@@ -374,6 +379,7 @@ class OverlayWindow(QMainWindow):
             self.btn_scan,
             self.btn_watch,
             self.btn_resume,
+            self.btn_intro,
             self.btn_listen,
             self.btn_copy,
             self.btn_close,
@@ -597,6 +603,71 @@ class OverlayWindow(QMainWindow):
                 QMessageBox.critical(dialog, "Invalid JSON", f"Format error in JSON:\n{jde}")
             except Exception as e:
                 QMessageBox.critical(dialog, "Error", f"Failed to save resume: {e}")
+
+        btn_save.clicked.connect(on_save)
+        btn_cancel.clicked.connect(dialog.reject)
+
+        try:
+            dialog.exec()
+        finally:
+            # Restore original flags
+            if config.STEALTH_FOCUS:
+                self.setWindowFlags(old_flags)
+                self.show()
+            self.schedule_exclude()
+
+    def _on_intro_click(self) -> None:
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QMessageBox, QLabel
+        from PyQt6.QtCore import Qt
+
+        # Temporarily enable focus on main window so child dialog works perfectly
+        old_flags = self.windowFlags()
+        if config.STEALTH_FOCUS:
+            self.setWindowFlags(old_flags & ~Qt.WindowType.WindowDoesNotAcceptFocus)
+            self.show() # Re-show window with new flags
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Import Candidate Self-Introduction / Past Technologies")
+        dialog.setMinimumSize(450, 350)
+        dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
+
+        layout = QVBoxLayout(dialog)
+
+        label = QLabel("Paste your introduction, past technologies, and projects:")
+        layout.addWidget(label)
+
+        text_edit = QTextEdit()
+        text_edit.setPlaceholderText("I am a Staff Engineer with 8 years of experience. I specialize in Artificial Intelligence, LangGraph, Python, cloud architecture, and vector databases...")
+        existing = config.load_intro_context()
+        if existing:
+            text_edit.setPlainText(existing)
+        layout.addWidget(text_edit)
+
+        btn_layout = QHBoxLayout()
+        btn_save = QPushButton("Save")
+        btn_cancel = QPushButton("Cancel")
+        btn_layout.addWidget(btn_save)
+        btn_layout.addWidget(btn_cancel)
+        layout.addLayout(btn_layout)
+
+        def on_save():
+            content = text_edit.toPlainText().strip()
+            if not content:
+                try:
+                    if config.INTRO_PATH.exists():
+                        config.INTRO_PATH.unlink()
+                    QMessageBox.information(dialog, "Success", "Introduction cleared.")
+                    dialog.accept()
+                except Exception as e:
+                    QMessageBox.warning(dialog, "Error", f"Could not clear introduction: {e}")
+                return
+
+            try:
+                config.INTRO_PATH.write_text(content, encoding="utf-8")
+                QMessageBox.information(dialog, "Success", "Introduction saved successfully!")
+                dialog.accept()
+            except Exception as e:
+                QMessageBox.critical(dialog, "Error", f"Failed to save introduction: {e}")
 
         btn_save.clicked.connect(on_save)
         btn_cancel.clicked.connect(dialog.reject)
