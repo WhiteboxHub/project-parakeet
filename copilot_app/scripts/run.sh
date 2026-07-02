@@ -18,9 +18,9 @@ if [[ ! -f "$ROOT/.env" ]]; then
   echo "Created interview-copilot/.env — add OPENAI_API_KEY"
 fi
 
-if [[ ! -f "$INSTALL_MARKER" || "$ROOT/requirements.txt" -nt "$INSTALL_MARKER" ]]; then
+if [[ ! -f "$INSTALL_MARKER" || "$ROOT/../requirements.txt" -nt "$INSTALL_MARKER" ]]; then
   echo "Installing project dependencies..."
-  "$PIP" install -r "$ROOT/requirements.txt" -q
+  "$PIP" install -r "$ROOT/../requirements.txt" -q
   touch "$INSTALL_MARKER"
 fi
 

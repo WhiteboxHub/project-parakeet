@@ -8,7 +8,7 @@ $Pip = Join-Path $Root "..\venv\Scripts\pip.exe"
 $MainPy = Join-Path $Root "..\main.py"
 $EnvFile = Join-Path $Root ".env"
 $EnvExample = Join-Path $Root ".env.example"
-$Requirements = Join-Path $Root "requirements.txt"
+$Requirements = Join-Path $Root "..\requirements.txt"
 $InstallMarker = Join-Path $Root "..\venv\.requirements-installed"
 
 if (-not (Test-Path $Python)) {
