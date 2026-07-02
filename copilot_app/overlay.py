@@ -467,6 +467,43 @@ class OverlayWindow(QMainWindow):
                 return
         super().wheelEvent(event)
 
+    def nativeEvent(self, event_type, message) -> tuple[bool, int]:
+        if config.IS_WINDOWS and event_type == b"windows_generic_MSG":
+            import ctypes
+            import ctypes.wintypes
+            msg = ctypes.wintypes.MSG.from_address(int(message))
+            if msg.message == 0x0084:  # WM_NCHITTEST
+                x = ctypes.c_short(msg.lParam & 0xFFFF).value
+                y = ctypes.c_short((msg.lParam >> 16) & 0xFFFF).value
+                pos = self.mapFromGlobal(QPoint(x, y))
+
+                border = 8  # Edge width in pixels
+                w = self.width()
+                h = self.height()
+
+                left = pos.x() < border
+                right = pos.x() > w - border
+                top = pos.y() < border
+                bottom = pos.y() > h - border
+
+                if left and top:
+                    return True, 13  # HTTOPLEFT
+                if right and top:
+                    return True, 14  # HTTOPRIGHT
+                if left and bottom:
+                    return True, 16  # HTBOTTOMLEFT
+                if right and bottom:
+                    return True, 17  # HTBOTTOMRIGHT
+                if left:
+                    return True, 10  # HTLEFT
+                if right:
+                    return True, 11  # HTRIGHT
+                if top:
+                    return True, 12  # HTTOP
+                if bottom:
+                    return True, 15  # HTBOTTOM
+        return super().nativeEvent(event_type, message)
+
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self.schedule_exclude()
