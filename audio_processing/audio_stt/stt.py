@@ -296,7 +296,7 @@ class DhwaniSTTProvider:
 
             provider_type = getattr(self._config, "dhwani_provider", "openai").lower()
             if provider_type == "deepgram":
-                interval = 0.08
+                interval = 0.04
             elif provider_type == "openai":
                 interval = 2.0
             else:

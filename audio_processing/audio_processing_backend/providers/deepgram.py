@@ -27,7 +27,7 @@ class DeepgramProvider(STTProvider):
                 sample_rate=16000,
                 channels=1,
                 interim_results=False,
-                endpointing=500,
+                endpointing=250,
                 language="en",
                 keyterm=["LangChain", "LangGraph", "land graph", "Landra", "MilvusDB", "BM25", "Agentic AI", "Agentic", "RAG", "Prometheus", "Grafana", "CloudWatch"]
             ) as connection:
