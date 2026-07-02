@@ -235,7 +235,7 @@ def should_use_coding_mode(question: str, force_coding: bool = False) -> bool:
         return True
     if config.CODING_MODE == "always":
         return True
-    return is_coding_question(question)
+    return False
 
 
 def generate_answer(
