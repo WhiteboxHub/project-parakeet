@@ -365,14 +365,14 @@ class OverlayWindow(QMainWindow):
             widget.setAutoFillBackground(False)
 
     def _make_see_through_edit(self, edit: QTextEdit | QPlainTextEdit) -> None:
-        """Force text areas transparent so background desktop text shows through."""
+        """Force text areas to have a semi-transparent dark backplate for high contrast on any background."""
         self._make_translucent_widget(edit)
         pal = edit.palette()
-        pal.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0, 0))
+        pal.setColor(QPalette.ColorRole.Base, QColor(10, 10, 12, 170))
         pal.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
         edit.setPalette(pal)
         edit.setStyleSheet(
-            "background: transparent; background-color: transparent; border: none;"
+            "background-color: rgba(10, 10, 12, 170); border: 1px solid rgba(255, 255, 255, 45); border-radius: 10px;"
         )
 
     def _apply_stealth_focus(self, central: QWidget) -> None:

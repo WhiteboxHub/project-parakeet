@@ -75,10 +75,10 @@ def stylesheet(*, transparent: bool = True) -> str:
     QLabel {{ color: {TEXT}; font-size: 15px; background: transparent; }}
     QTextEdit, QPlainTextEdit {{
         background: transparent;
-        background-color: transparent;
+        background-color: rgba(10, 10, 12, 170);
         color: {TEXT};
         font-size: 17px;
-        border: 1px solid {c["border"]};
+        border: 1px solid rgba(255, 255, 255, 45);
         border-radius: 10px;
         padding: 10px;
         selection-background-color: rgba(80, 120, 255, 120);
