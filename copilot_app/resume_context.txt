@@ -1,11 +1,206 @@
-Paste your resume here (plain text) so answers match your background.
-
-Example sections:
-- Name, contact
-- Summary
-- Skills
-- Experience (company, role, dates, bullets)
-- Education
-- Projects
-
-The AI uses this to tailor STAR stories and technical examples to your real experience.
+{
+  "selectedTemplate": 1,
+  "headings": {},
+  "basics": {
+    "name": "S S Geetha Kumari M",
+    "label": "AI Engineer | MLOps Engineer | Full-Stack Engineer | Microservices & Cloud Specialist",
+    "email": "sreegeethasanya99@gmail.com",
+    "phone": "(209)-582-9312",
+    "summary": "Results-driven AI Engineer with 10+ years of progressive experience across Software Engineering, MLOps, and AI Engineering. Proven expertise in building production-grade RAG pipelines, agentic AI systems using LangGraph, MLOps infrastructure, and full-stack applications across Banking and FinTech domains. Delivered enterprise AI solutions with end-to-end ownership across data ingestion, vector search, agentic orchestration, and cloud deployment on AWS EKS. Adept at leading complex SDLC, and driving zero-defect production releases in Agile/Scrum environments.",
+    "location": {
+      "address": "Pleasanton, CA"
+    }
+  },
+  "education": [
+    {
+      "institution": "Andhra University, India",
+      "area": "Computer Applications",
+      "studyType": "Master of Computer Applications (MCA)",
+      "startDate": "2007",
+      "endDate": "2009"
+    }
+  ],
+  "work": [
+    {
+      "company": "Talentscreen ",
+      "position": "AI Engineer",
+      "startDate": "Jan 2025",
+      "endDate": "Present",
+      "summary": "Designed and delivered a production-grade AI assistant platform leveraging RAG (Retrieval-Augmented Generation) and Agentic AI patterns to power intelligent knowledge retrieval and automated action-taking workflows.",
+      "highlights": [
+        "Designed and implemented a hierarchical multi-agent system using LangGraph with orchestrator and domain-specific agents to automate complex enterprise workflows",
+        "Developed stateful cyclic agent workflows supporting planning, tool execution, observation, retries, and self-correction across long-running tasks.",
+        "Integrated Model Context Protocol (MCP) servers to standardize communication between agents and enterprise APIs, databases, and automation services.",
+        "Designed and implemented a hybrid retrieval layer combining dense semantic retrieval (Milvus vector search), BM25 keyword retrieval, and graph-based retrieval for relationship-aware lookups; fused results using weighted reranking with a cross-encoder model and configurable similarity thresholds to filter irrelevant results with fallback logic.",
+        "Built ReAct-based agents with function calling capabilities for dynamic tool selection, backend execution, and adaptive decision-making.",
+        "Implemented persistent memory architecture using Milvus and PostgreSQL to maintain long-term context, workflow state, and historical interactions.",
+        "Integrated tool calling via Model Context Protocol (MCP), enabling agents to invoke external APIs, database queries, and legacy system connectors through standardized tool definitions; implemented ReAct reasoning loops for iterative planning and action, with retry logic and an eject-button fallback to human handoff after three failed attempts.",
+        "Implemented a Compliance Sentinel agent using the Producer-Critic reflection pattern to review all agent outputs before delivery to users, enforcing PII redaction, compliance-sensitive topic classification, and prompt-level restrictions; all guardrail triggers were logged to a central audit trail with tenant identifier and action metadata.",
+        "Built an end-to-end Retrieval-Augmented Generation (RAG) pipeline for enterprise knowledge retrieval using LangChain, Milvus, and open-source embedding models.",
+        "Developed document ingestion pipelines supporting PDFs, Word documents, SharePoint content, and scanned files using Apache Tika, AWS Textract, and Docling.",
+        "Developed retrieval orchestration pipelines in LangChain integrating vector search, metadata filtering, reranking, and context aggregation before LLM generation.",
+        "Designed a hybrid retrieval architecture leveraging BM25, dense embeddings, and cross-encoder reranking, resulting in more accurate context retrieval and reduced hallucinations in RAG applications.",
+        "Instrumented RAG and LangGraph workflows using Prometheus metrics, Grafana dashboards, and AWS CloudWatch for real-time monitoring of latency, retrieval quality, and agent execution performance."
+      ]
+    },
+    {
+      "company": "Cognizant Technology Solutions (Client: Wells Fargo \u2013 Client Transaction Hub)",
+      "position": "Software/MLOps Engineer",
+      "startDate": "Aug 2023",
+      "endDate": "Dec 2024",
+      "summary": "Led MLOps infrastructure and pipeline engineering for the Client Transaction Hub (CTH), establishing a production-grade ML platform for data versioning, feature engineering, pipeline orchestration, model deployment, and system observability.",
+      "highlights": [
+        "Implemented DVC-based data versioning integrated with S3 as the remote storage backend, enabling reproducible pipeline runs by tracking dataset checksums in Git and linking each MLflow experiment run to the exact data version used; automated raw data ingestion pipelines from Oracle 19C to S3 with scheduled batch archival workflows.",
+        "Designed and deployed a Feature Store architecture with an offline store backed by S3/Parquet for historical training data and an online store using Redis for low-latency feature retrieval during inference; enforced shared feature transformation definitions across training and serving environments to prevent training-serving skew.",
+        "Orchestrated end-to-end ML workflows using Apache Airflow with SLA monitoring, automatic retries, and alerting; reduced manual intervention by 95% through scheduled job automation.",
+        "Deployed a centralized MLflow Tracking Server backed by RDS for metadata and S3 for artifacts; standardized experiment logging across all pipeline runs; governed the model lifecycle through Staging, Validation, and Production promotion workflows with automated integration tests and latency checks.",
+        "Built CI/CD pipelines for ML systems using Jenkins and Docker, automating training pipeline triggers on code merges and data updates; deployment pipelines built Docker images containing FastAPI inference services, pushed to Amazon ECR, and updated EKS Kubernetes deployment manifests with new image tags.",
+        "Engineered a model A/B testing infrastructure at the deployment layer using canary release patterns on EKS, enabling controlled traffic splitting between pipeline versions; monitored rollout health through CloudWatch alarms and automated rollback triggers.",
+        "Managed containerized services on Amazon EKS with horizontal pod autoscaling for traffic spike handling and self-healing configuration; maintained environment parity across Dev, Staging, and Production using Docker image pinning and infrastructure-as-code deployment manifests.",
+        "Enforced RBAC access controls on the platform, restricting production deployment permissions to approved roles; maintained full audit trails linking every request back to the model registry version, dataset DVC hash, and code commit for compliance and explainability requirements."
+      ]
+    },
+    {
+      "company": "Capgemini (Client: 21st Century Insurance \u2013 Farmers Insurance Group)",
+      "position": "Senior Software Engineer",
+      "startDate": "Mar 2021",
+      "endDate": "Jul 2023",
+      "summary": "Developed a unified web services platform for 21st Century Insurance, enabling channel integration for the Call Center Sales project serving customers across 48 U.S. states.",
+      "highlights": [
+        "Delivered all project modules with 0 production defects, meeting strict quality benchmarks in an Agile/Scrum delivery model.",
+        "Designed and developed 10+ RESTful microservices using JAX-RS and Jersey framework, supporting channel integration for digital and call center sales platforms.",
+        "Identified bounded contexts and built decoupled micro-frontends and microservices for the Digital channel, reducing inter-system dependency and improving deployability.",
+        "Applied enterprise design patterns (Singleton, Factory, Abstract Factory, Decorator, Business Delegate) to standardize architecture across the application suite.",
+        "Leveraged core Java concepts \u2014 Collections, Multithreading, OOP, Exception Handling \u2014 to develop robust, production-grade application modules.",
+        "Implemented Hibernate Validation framework for front-end validation and ORM-based persistence, reducing data integrity issues in form submissions.",
+        "Developed UI components using JSP, JavaScript, and jQuery; contributed to full SDLC from requirements gathering through client delivery.",
+        "Participated in code reviews, enforced coding standards, and mentored junior engineers on design patterns and service decomposition best practices.",
+        "Collaborated with QA teams to define integration test plans and automated test suites using JUnit and TestNG, ensuring end-to-end service reliability before production releases."
+      ]
+    },
+    {
+      "company": "Capgemini (Client: Discover Financial Services \u2013 Atlas Project)",
+      "position": "Associate Software Engineer",
+      "startDate": "Sep 2017",
+      "endDate": "Feb 2021",
+      "summary": "Built and enhanced the Atlas account origination platform for Discover Financial Services, serving nearly 50 million cardholders across savings, money market, and IRA account workflows.",
+      "highlights": [
+        "Developed Spring Web Services to integrate mainframe IMS transactions, enabling real-time access to legacy customer data for banking agents.",
+        "Implemented 2 new Angular.js + Bootstrap UI screens (Backorder and Supplemental Back Order Report), improving agent workflow efficiency in account management.",
+        "Completed end-to-end mainframe integration testing by connecting IBM MQ from local development environment, validating message queue reliability.",
+        "Engineered Hibernate ORM layer for Oracle database transactions; wrote complex SQL queries including joins, subqueries, and correlated subqueries.",
+        "Generated DDL scripts for new database objects \u2014 tables, views, sequences, functions, triggers, packages, and stored procedures \u2014 supporting account origination business logic.",
+        "Led full SDLC for multiple Change Requests; handled UML design, coding, and enhancement lifecycle for all assigned work products.",
+        "Applied Java multithreading for parallel processing, improving throughput for concurrent customer account operations.",
+        "Contributed to peer code reviews, identifying defects early in the development cycle and ensuring adherence to coding standards across the team."
+      ]
+    },
+    {
+      "company": "Capgemini (Client: SCOPE International \u2013 Standard Chartered Bank)",
+      "position": "Software Engineer",
+      "startDate": "Feb 2015",
+      "endDate": "Aug 2017",
+      "summary": "Contributed to the ISIS (Information Systems Integration Services) hub, which integrates financial applications across Standard Chartered Bank's Hong Kong and UK operations.",
+      "highlights": [
+        "Developed and deployed IBM MQ message flows enabling end-to-end file transfer and online messaging across geographically distributed banking applications.",
+        "Served as WTX developer, designing Type Trees and building transformation maps for inter-application data translation and message routing.",
+        "Built and enhanced JSP pages, HTML interfaces, and Java Servlets to support internal portal and client-facing web applications.",
+        "Performed deployment, debugging, and unit testing of message flows, maintaining 99%+ uptime for critical inter-application connectivity.",
+        "Collaborated cross-functionally with client teams daily to deliver solutions for complex business integration requirements on schedule.",
+        "Conducted code reviews to identify and resolve bugs, contributing to improved software quality and reduced regression defects across the integration platform."
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "name": "LLM & GenAI ",
+      "keywords": [
+        "LangGraph",
+        "LangChain",
+        "RAG Pipelines",
+        "Agentic AI",
+        "Tool Calling ",
+        "Claude Sonnet"
+      ]
+    },
+    {
+      "name": "NLP & Retrieval",
+      "keywords": [
+        "Hybrid Retrieval",
+        "BM25",
+        "Docling",
+        "Sentence Transformers",
+        "RAGAS",
+        "DeepEval"
+      ]
+    },
+    {
+      "name": "Vector Databases",
+      "keywords": [
+        "Milvus",
+        "FAISS",
+        "Chroma DB",
+        "Pinecone"
+      ]
+    },
+    {
+      "name": "MLOps & DevOps",
+      "keywords": [
+        "DVC ",
+        "MLflow ",
+        "Apache Airflow ",
+        "GitLab CI/CD ",
+        "Docker",
+        "Kubernetes",
+        "AWS (EC2, Bedrock)"
+      ]
+    },
+    {
+      "name": "Observability",
+      "keywords": [
+        "Langfuse",
+        "CloudWatch",
+        "Grafana",
+        "Prometheus"
+      ]
+    },
+    {
+      "name": "Programming Languages",
+      "keywords": [
+        "Python",
+        "Java",
+        "JavaScript"
+      ]
+    },
+    {
+      "keywords": []
+    },
+    {
+      "name": "Databases",
+      "keywords": [
+        "PostgreSQL",
+        "MySQL",
+        "MongoDB",
+        "Redis"
+      ]
+    },
+    {
+      "keywords": []
+    }
+  ],
+  "projects": [
+    {
+      "keywords": []
+    }
+  ],
+  "awards": [],
+  "sections": [
+    "templates",
+    "profile",
+    "education",
+    "work",
+    "skills",
+    "projects",
+    "awards"
+  ]
+}

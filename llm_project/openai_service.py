@@ -324,6 +324,9 @@ Candidate background (use for context matching):
 Candidate Self-Introduction:
 {intro}
 
+Inserted Documents (PDFs):
+{pdf_docs}
+
 Target role: {role}
 {job_desc}
 """
@@ -380,6 +383,9 @@ Candidate background:
 
 Candidate Self-Introduction:
 {intro}
+
+Inserted Documents (PDFs):
+{pdf_docs}
 
 Target role: {role}
 {job_desc}
@@ -520,6 +526,46 @@ def should_use_coding_mode(question: str, force_coding: bool = False) -> bool:
     return False
 
 
+def is_question_linked(question: str, conversation: list[dict]) -> bool:
+    """Check if the new question is contextually linked to the previous conversation turns."""
+    if not conversation:
+        return False
+
+    # Extract last 3 turns to keep context analysis concise
+    recent_turns = conversation[-3:]
+    formatted_history = ""
+    for turn in recent_turns:
+        role = "Candidate" if turn["role"] == "assistant" else "Interviewer"
+        formatted_history += f"{role}: {turn['content']}\n"
+
+    prompt = (
+        "You are an assistant analyzing a job interview dialogue.\n"
+        "Determine if the NEW QUESTION is contextually linked, related, or a follow-up to the PREVIOUS CONVERSATION.\n"
+        "Examples of linked questions: asking to optimize, clarify, or explain the previous answer; asking about complexity/trade-offs of the previous code; continuing the same discussion.\n"
+        "Examples of NOT linked questions: starting a completely new topic; introducing a new coding problem; shifting to a different part of the interview.\n\n"
+        "PREVIOUS CONVERSATION:\n"
+        f"{formatted_history}\n"
+        "NEW QUESTION:\n"
+        f"{question}\n\n"
+        "Reply with ONLY 'YES' or 'NO'."
+    )
+
+    try:
+        client = _client()
+        response = client.chat.completions.create(
+            model=config.OPENAI_CHAT_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            max_tokens=5,
+        )
+        answer = response.choices[0].message.content.strip().upper()
+        print(f"[openai_service] Context linkage check result: {answer}", flush=True)
+        return "YES" in answer
+    except Exception as e:
+        print(f"[openai_service] Error checking context linkage: {e}", flush=True)
+        return True
+
+
 def generate_answer(
     question: str,
     conversation: list[dict],
@@ -531,6 +577,10 @@ def generate_answer(
     client = _client()
     resume = config.load_resume_context() or "(No resume loaded — add resume_context.txt)"
     intro = config.load_intro_context() or "(No self-introduction loaded — add intro_context.txt)"
+    
+    from llm_project.pdf_loader import load_pdf_contexts
+    pdf_docs = load_pdf_contexts() or "(No additional PDF documents inserted)"
+
     job_desc = ""
     if config.JOB_DESCRIPTION.strip():
         job_desc = f"Job focus:\n{config.JOB_DESCRIPTION.strip()}"
@@ -541,6 +591,7 @@ def generate_answer(
             lang=lang,
             resume=resume,
             intro=intro,
+            pdf_docs=pdf_docs,
             role=config.JOB_ROLE,
             job_desc=job_desc,
         )
@@ -554,6 +605,7 @@ def generate_answer(
         system = SYSTEM_PROMPT.format(
             resume=resume,
             intro=intro,
+            pdf_docs=pdf_docs,
             role=config.JOB_ROLE,
             job_desc=job_desc,
         )
@@ -562,6 +614,7 @@ def generate_answer(
         temperature = 0.4
 
     messages = [{"role": "system", "content": system}]
+
     for turn in conversation[-6:]:
         messages.append(turn)
     messages.append({"role": "user", "content": user_msg})

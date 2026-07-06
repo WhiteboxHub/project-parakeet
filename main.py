@@ -554,8 +554,18 @@ class InterviewApp:
         if self._shutting_down:
             return
         self._shutting_down = True
+
+        if config.EMAIL_RECEIVER:
+            try:
+                from email_service import send_transcript_email
+                t = threading.Thread(target=send_transcript_email, name="email-transcript-thread", daemon=False)
+                t.start()
+            except Exception as e:
+                print(f"Error launching email thread: {e}")
+
         self._watch_timer.stop()
         self._watcher.enabled = False
+
         if self.audio_pipeline is not None:
             self.audio_pipeline.stop()
             self.audio_pipeline = None
@@ -604,6 +614,19 @@ class InterviewApp:
         if request_id < self._generation_request_id:
             return
 
+        if is_final and include_history:
+            # Safely copy conversation under lock
+            with self._generation_lock:
+                temp_conv = list(self.conversation)
+            if temp_conv:
+                from llm_project.openai_service import is_question_linked
+                is_linked = is_question_linked(text, temp_conv)
+                if not is_linked:
+                    with self._generation_lock:
+                        if request_id == self._generation_request_id:
+                            print("[main] Context mismatch detected. Starting a new context (clearing history).", flush=True)
+                            self.conversation = []
+
         with self._generation_lock:
             if request_id < self._generation_request_id:
                 return
@@ -611,6 +634,7 @@ class InterviewApp:
             self._busy = True
             self.bridge.question.emit(text)
             history = list(self.conversation) if include_history else []
+
 
         try:
             from openai_service import should_use_coding_mode

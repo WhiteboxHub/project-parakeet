@@ -94,6 +94,13 @@ GLASS_SEE_THROUGH = _env_bool("GLASS_SEE_THROUGH", "true")
 SSL_VERIFY = _env_bool("SSL_VERIFY", "true")
 SSL_CA_FILE = _env("SSL_CA_FILE", "")
 
+EMAIL_RECEIVER = _env("EMAIL_RECEIVER", "")
+SMTP_SERVER = _env("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(_env("SMTP_PORT", "587"))
+SMTP_USERNAME = _env("SMTP_USERNAME", "")
+SMTP_PASSWORD = _env("SMTP_PASSWORD", "")
+SMTP_USE_TLS = _env_bool("SMTP_USE_TLS", "true")
+
 
 def use_transparent_overlay() -> bool:
     return OVERLAY_TRANSPARENT
