@@ -148,6 +148,65 @@ class _ResizeGrip(QWidget):
         super().mouseReleaseEvent(event)
 
 
+def show_resume_dialog(parent=None) -> None:
+    from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QMessageBox, QLabel
+    from PyQt6.QtCore import Qt
+    import json
+    import config
+
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("Import Resume JSON")
+    dialog.setMinimumSize(450, 350)
+    dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
+
+    layout = QVBoxLayout(dialog)
+
+    label = QLabel("Paste your Resume in JSON format:")
+    layout.addWidget(label)
+
+    text_edit = QTextEdit()
+    text_edit.setPlaceholderText('{\n  "name": "John Doe",\n  "skills": ["Python", "Machine Learning"],\n  "experience": [\n    {"role": "AI Engineer", "company": "Tech Corp", "duration": "2 years"}\n  ]\n}')
+    existing = config.load_resume_context()
+    if existing:
+        text_edit.setPlainText(existing)
+    layout.addWidget(text_edit)
+
+    btn_layout = QHBoxLayout()
+    btn_save = QPushButton("Save")
+    btn_skip = QPushButton("Skip")
+    btn_layout.addWidget(btn_save)
+    btn_layout.addWidget(btn_skip)
+    layout.addLayout(btn_layout)
+
+    def on_save():
+        content = text_edit.toPlainText().strip()
+        if not content:
+            try:
+                if config.RESUME_PATH.exists():
+                    config.RESUME_PATH.unlink()
+                QMessageBox.information(dialog, "Success", "Resume cleared.")
+                dialog.accept()
+            except Exception as e:
+                QMessageBox.warning(dialog, "Error", f"Could not clear resume: {e}")
+            return
+
+        try:
+            parsed = json.loads(content)
+            formatted = json.dumps(parsed, indent=2)
+            config.RESUME_PATH.write_text(formatted, encoding="utf-8")
+            QMessageBox.information(dialog, "Success", "Resume JSON saved successfully!")
+            dialog.accept()
+        except json.JSONDecodeError as jde:
+            QMessageBox.critical(dialog, "Invalid JSON", f"Format error in JSON:\n{jde}")
+        except Exception as e:
+            QMessageBox.critical(dialog, "Error", f"Failed to save resume: {e}")
+
+    btn_save.clicked.connect(on_save)
+    btn_skip.clicked.connect(dialog.reject)
+
+    dialog.exec()
+
+
 class OverlayWindow(QMainWindow):
     answer_ready = pyqtSignal(object)
     status_changed = pyqtSignal(str)
@@ -638,74 +697,22 @@ class OverlayWindow(QMainWindow):
         self.schedule_exclude()
 
     def _on_resume_click(self) -> None:
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QMessageBox, QLabel
-        from PyQt6.QtCore import Qt
-        import json
-
         # Temporarily enable focus on main window so child dialog works perfectly
         old_flags = self.windowFlags()
         if config.STEALTH_FOCUS:
+            from PyQt6.QtCore import Qt
             self.setWindowFlags(old_flags & ~Qt.WindowType.WindowDoesNotAcceptFocus)
             self.show() # Re-show window with new flags
 
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Import Resume JSON")
-        dialog.setMinimumSize(450, 350)
-        dialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
-
-        layout = QVBoxLayout(dialog)
-
-        label = QLabel("Paste your Resume in JSON format:")
-        layout.addWidget(label)
-
-        text_edit = QTextEdit()
-        text_edit.setPlaceholderText('{\n  "name": "John Doe",\n  "skills": ["Python", "Machine Learning"],\n  "experience": [\n    {"role": "AI Engineer", "company": "Tech Corp", "duration": "2 years"}\n  ]\n}')
-        existing = config.load_resume_context()
-        if existing:
-            text_edit.setPlainText(existing)
-        layout.addWidget(text_edit)
-
-        btn_layout = QHBoxLayout()
-        btn_save = QPushButton("Save")
-        btn_cancel = QPushButton("Cancel")
-        btn_layout.addWidget(btn_save)
-        btn_layout.addWidget(btn_cancel)
-        layout.addLayout(btn_layout)
-
-        def on_save():
-            content = text_edit.toPlainText().strip()
-            if not content:
-                try:
-                    if config.RESUME_PATH.exists():
-                        config.RESUME_PATH.unlink()
-                    QMessageBox.information(dialog, "Success", "Resume cleared.")
-                    dialog.accept()
-                except Exception as e:
-                    QMessageBox.warning(dialog, "Error", f"Could not clear resume: {e}")
-                return
-
-            try:
-                parsed = json.loads(content)
-                formatted = json.dumps(parsed, indent=2)
-                config.RESUME_PATH.write_text(formatted, encoding="utf-8")
-                QMessageBox.information(dialog, "Success", "Resume JSON saved successfully!")
-                dialog.accept()
-            except json.JSONDecodeError as jde:
-                QMessageBox.critical(dialog, "Invalid JSON", f"Format error in JSON:\n{jde}")
-            except Exception as e:
-                QMessageBox.critical(dialog, "Error", f"Failed to save resume: {e}")
-
-        btn_save.clicked.connect(on_save)
-        btn_cancel.clicked.connect(dialog.reject)
-
         try:
-            dialog.exec()
+            show_resume_dialog(self)
         finally:
             # Restore original flags
             if config.STEALTH_FOCUS:
                 self.setWindowFlags(old_flags)
                 self.show()
             self.schedule_exclude()
+
 
     def _on_intro_click(self) -> None:
         from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QMessageBox, QLabel

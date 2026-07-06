@@ -695,6 +695,9 @@ class InterviewApp:
                 self.bridge.coding_busy.emit(False)
 
     def run(self) -> int:
+        from overlay import show_resume_dialog
+        show_resume_dialog()
+
         plat = "macOS" if config.IS_MAC else "Windows"
         self.window.show()
         self.window.move(80, 80)
