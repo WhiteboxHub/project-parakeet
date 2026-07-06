@@ -307,22 +307,42 @@ Maintainability
 Fault Tolerance
 
 ###############################
-## OUTPUT QUALITY
+## OUTPUT QUALITY & CONCISENESS RULES
 ###############################
 
-Be concise.
-Avoid filler.
-Avoid repetition.
-Use markdown.
-Use tables when useful.
-Use bullet lists.
-Use ASCII diagrams where appropriate.
+- Ensure the response is EXTREMELY SHORT, high-density, and compact.
+- Keep the entire answer under 100-150 words total (maximum of 2-3 short bullet points).
+- Do not use conversational filler, introductions, preambles, or verbose explanations.
+- Get straight to the key architectural or behavioral highlights so the candidate can speak it within 20-30 seconds without getting cut off.
+- Pack full, deep technical meaning using condensed keywords and bullet lists.
+- Use markdown and tables only when they save space.
+
+###############################
+## ALIGNED CONTEXT & KEYWORD MATCHING
+###############################
+
+You must tailor all answers to match the candidate's self-introduction, technical skills/keywords, and experience:
+1. Align all explanations, approaches, and code styles to use the exact technologies, tools, and keywords listed under "TECHNICAL SKILLS & KEYWORDS".
+2. Incorporate terms, rules, architectures, and guidelines from "Inserted Documents (PDFs)".
+3. Speak and solve tasks as if you possess the exact candidate profile listed.
+4. Avoid suggesting or introducing tools, architectures, or libraries that contradict the candidate's listed skills and keywords.
+5. Review the conversation history. If the new question is a follow-up, use the history. If the new question is completely unrelated (e.g. shifts from behavioral/disagreements to a technical coding problem), ignore the history entirely and start fresh.
+6. QUESTION CLASSIFICATION: Determine if the input text is a question/problem from the interviewer. If the input is actually a candidate answer, candidate statement, or general non-question chatter (e.g. candidate explaining their resume or replying), you MUST respond with exactly the word "NO_QUESTION". Do not generate any answer.
 
 Candidate background (use for context matching):
 {resume}
 
 Candidate Self-Introduction:
 {intro}
+
+Project / System Architecture Overview:
+{project_overview}
+
+Core Use Case / Context:
+- Domain/use-case: Customer care call center.
+- Problem solved: High volume of customer calls, where agents spent too much time searching and navigating across different sites.
+- Solution: An agentic system where agents input prompts directly to receive answers instantly, helping them quickly convey information to the customer over the call.
+- Story Focus: Focus heavily on the engineering story, architectural decisions, trade-offs, and scaling, keeping the domain context as the background layer (customer care call center).
 
 Inserted Documents (PDFs):
 {pdf_docs}
@@ -338,6 +358,18 @@ CODING_PROMPT = """###############################
 You are an enterprise-grade AI Engineering Assistant specializing in live coding interviews.
 
 Your responses must prioritize technical correctness, logical consistency, production considerations, edge cases, and time/space complexity.
+
+###############################
+## ALIGNED CONTEXT & KEYWORD MATCHING
+###############################
+
+You must tailor all answers to match the candidate's self-introduction, technical skills/keywords, and experience:
+1. Align all explanations, approaches, and code styles to use the exact technologies, tools, and keywords listed under "TECHNICAL SKILLS & KEYWORDS".
+2. Incorporate terms, rules, architectures, and guidelines from "Inserted Documents (PDFs)".
+3. Speak and solve tasks as if you possess the exact candidate profile listed.
+4. Avoid suggesting or introducing tools, architectures, or libraries that contradict the candidate's listed skills and keywords.
+5. Review the conversation history. If the new question is a follow-up, use the history. If the new question is completely unrelated (e.g. shifts from behavioral/disagreements to a technical coding problem), ignore the history entirely and start fresh.
+6. QUESTION CLASSIFICATION: Determine if the input text is a question/problem from the interviewer. If the input is actually a candidate answer, candidate statement, or general non-question chatter (e.g. candidate explaining their resume or replying), you MUST respond with exactly the word "NO_QUESTION". Do not generate any answer.
 
 ###############################
 ## CODING MODE INSTRUCTIONS
@@ -359,22 +391,21 @@ Provide:
 ###############################
 
 ===APPROACH===
-- Problem Understanding and Approach (from brute force to optimal).
-- Dry Run explanation and things to mention during the interview.
-- Discussion points and trade-offs.
+- Ultra-concise problem summary and approach (maximum 1-2 bullet points, under 80 words total).
+- Keep approach, trade-offs, and dry-run talk points extremely brief.
 
 ===COMPLEXITY===
-Time: O(...) — explain why.
-Space: O(...) — explain why.
+Time: O(...) — explain in 5-10 words.
+Space: O(...) — explain in 5-10 words.
 
 ===CODE===
 ```{lang}
 # Complete working solution in {lang} with correct imports and function signature.
-# Python/target language code should be clean, readable, and handle edge cases.
+# Keep code clean, optimized, and compact.
 ```
 
 ===EDGE_CASES===
-- List of edge cases and verification tests to run.
+- List of 2-3 key edge cases to verify (under 30 words total).
 
 Language for implementation: {lang}
 
@@ -383,6 +414,15 @@ Candidate background:
 
 Candidate Self-Introduction:
 {intro}
+
+Project / System Architecture Overview:
+{project_overview}
+
+Core Use Case / Context:
+- Domain/use-case: Customer care call center.
+- Problem solved: High volume of customer calls, where agents spent too much time searching and navigating across different sites.
+- Solution: An agentic system where agents input prompts directly to receive answers instantly, helping them quickly convey information to the customer over the call.
+- Story Focus: Focus heavily on the engineering story, architectural decisions, trade-offs, and scaling, keeping the domain context as the background layer (customer care call center).
 
 Inserted Documents (PDFs):
 {pdf_docs}
@@ -484,7 +524,8 @@ def _client() -> OpenAI:
         raise ValueError(
             "OPENAI_API_KEY missing in interview-copilot/.env only (must start with sk-)"
         )
-    http_client = httpx.Client(verify=_ssl_verify_setting(), timeout=120.0)
+    timeout_config = httpx.Timeout(20.0, connect=5.0, read=10.0, write=10.0)
+    http_client = httpx.Client(verify=_ssl_verify_setting(), timeout=timeout_config)
     _client_instance = OpenAI(
         api_key=config.OPENAI_API_KEY,
         http_client=http_client,
@@ -566,6 +607,64 @@ def is_question_linked(question: str, conversation: list[dict]) -> bool:
         return True
 
 
+def get_parsed_resume_context() -> str:
+    import json
+    import config
+    raw_resume = config.load_resume_context()
+    if not raw_resume:
+        return "(No resume loaded — add resume_context.txt)"
+
+    try:
+        data = json.loads(raw_resume)
+        parts = []
+
+        # Basics
+        basics = data.get("basics", {})
+        name = basics.get("name")
+        label = basics.get("label")
+        summary = basics.get("summary")
+        if name or label or summary:
+            parts.append("### CANDIDATE PROFILE")
+            if name: parts.append(f"Name: {name}")
+            if label: parts.append(f"Title/Role: {label}")
+            if summary: parts.append(f"Summary: {summary}")
+            parts.append("")
+
+        # Skills & Tech Keywords
+        skills = data.get("skills", [])
+        if skills:
+            parts.append("### TECHNICAL SKILLS & KEYWORDS")
+            for skill in skills:
+                name_val = skill.get("name")
+                keywords = skill.get("keywords", [])
+                if name_val or keywords:
+                    kw_str = ", ".join(keywords) if keywords else "None"
+                    parts.append(f"- {name_val}: {kw_str}")
+            parts.append("")
+
+        # Work Experience
+        work = data.get("work", [])
+        if work:
+            parts.append("### WORK EXPERIENCE")
+            for job in work:
+                company = job.get("company")
+                position = job.get("position")
+                summary_val = job.get("summary")
+                highlights = job.get("highlights", [])
+                if company or position:
+                    parts.append(f"**{position}** at **{company}** ({job.get('startDate', '')} - {job.get('endDate', '')})")
+                    if summary_val:
+                        parts.append(f"  *Summary*: {summary_val}")
+                    for h in highlights[:4]:  # limit to top highlights
+                        parts.append(f"  - {h}")
+            parts.append("")
+
+        return "\n".join(parts).strip()
+    except Exception:
+        # Fallback to raw resume if JSON parsing fails
+        return raw_resume
+
+
 def generate_answer(
     question: str,
     conversation: list[dict],
@@ -575,8 +674,9 @@ def generate_answer(
 ) -> ParsedResponse:
     coding = should_use_coding_mode(question, force_coding)
     client = _client()
-    resume = config.load_resume_context() or "(No resume loaded — add resume_context.txt)"
+    resume = get_parsed_resume_context()
     intro = config.load_intro_context() or "(No self-introduction loaded — add intro_context.txt)"
+    project_overview = config.load_project_overview_context() or "(No project overview context loaded)"
     
     from llm_project.pdf_loader import load_pdf_contexts
     pdf_docs = load_pdf_contexts() or "(No additional PDF documents inserted)"
@@ -591,6 +691,7 @@ def generate_answer(
             lang=lang,
             resume=resume,
             intro=intro,
+            project_overview=project_overview,
             pdf_docs=pdf_docs,
             role=config.JOB_ROLE,
             job_desc=job_desc,
@@ -605,12 +706,13 @@ def generate_answer(
         system = SYSTEM_PROMPT.format(
             resume=resume,
             intro=intro,
+            project_overview=project_overview,
             pdf_docs=pdf_docs,
             role=config.JOB_ROLE,
             job_desc=job_desc,
         )
         user_msg = f"Interviewer asked:\n{question}"
-        max_tokens = 800
+        max_tokens = 250
         temperature = 0.4
 
     messages = [{"role": "system", "content": system}]
@@ -620,23 +722,51 @@ def generate_answer(
     messages.append({"role": "user", "content": user_msg})
 
     winner_provider = None
-    winner_lock = threading.Lock()
-    final_raw_text = ""
-    result_queue = queue.Queue()
-    errors = []
-    errors_lock = threading.Lock()
+    active_providers = config.get_active_providers()
+    final_responses = {}
+    threads = []
 
-    def run_stream(provider_name, client_obj, model_name):
-        nonlocal winner_provider, final_raw_text
+    openai_messages = [{"role": "system", "content": system}]
+    for turn in conversation[-6:]:
+        openai_messages.append(turn)
+    openai_messages.append({"role": "user", "content": user_msg})
+
+    def run_openai():
         try:
-            print(f"[openai_service] Racing: {provider_name} call started...", flush=True)
+            print("[openai_service] OpenAI call started...", flush=True)
             if is_cancelled and is_cancelled():
-                result_queue.put(None)
                 return
+
+            use_local = getattr(config, "USE_LOCAL_LLM", False)
+            if use_local:
+                fallback_model = "qwen3:8b"
+                try:
+                    r = httpx.get("http://127.0.0.1:11434/api/tags", timeout=2.0)
+                    if r.status_code == 200:
+                        models = [m["name"] for m in r.json().get("models", [])]
+                        qwen_models = [m for m in models if "qwen" in m]
+                        if qwen_models:
+                            preferred = ["qwen3:8b", "qwen3:14b", "qwen3:30b", "qwen3", "qwen2.5:7b", "qwen2.5:14b", "qwen2.5:3b", "qwen2.5"]
+                            for pref in preferred:
+                                if pref in qwen_models:
+                                    fallback_model = pref
+                                    break
+                except Exception:
+                    pass
+
+                local_client = OpenAI(
+                    base_url="http://127.0.0.1:11434/v1",
+                    api_key="ollama",
+                )
+                client_obj = local_client
+                model_name = fallback_model
+            else:
+                client_obj = client
+                model_name = config.OPENAI_CHAT_MODEL
 
             resp = client_obj.chat.completions.create(
                 model=model_name,
-                messages=messages,
+                messages=openai_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,
@@ -645,7 +775,6 @@ def generate_answer(
             accumulated_text = ""
             for chunk in resp:
                 if is_cancelled and is_cancelled():
-                    result_queue.put(None)
                     return
 
                 if not chunk.choices or not chunk.choices[0].delta.content:
@@ -653,119 +782,185 @@ def generate_answer(
 
                 content = chunk.choices[0].delta.content
                 accumulated_text += content
-
-                with winner_lock:
-                    if winner_provider is None:
-                        winner_provider = provider_name
-                        print(f"[openai_service] Racing: {provider_name} won the race!", flush=True)
-
-                    if winner_provider != provider_name:
-                        result_queue.put(None)
-                        return  # lost race, abort
-
-                # If we won, notify on_chunk and update final text
-                final_raw_text = accumulated_text
                 if on_chunk:
                     parsed = parse_structured_response(accumulated_text, coding)
-                    on_chunk(parsed)
+                    on_chunk("openai", parsed)
 
-            result_queue.put((provider_name, final_raw_text))
-            print(f"[openai_service] Racing: {provider_name} completed streaming successfully!", flush=True)
+            final_responses["openai"] = parse_structured_response(accumulated_text, coding)
+            from token_tracker import tracker_instance
+            tracker_instance.record_llm_call("openai", model_name, system + "\n" + user_msg, final_responses["openai"].full_text)
+            print("[openai_service] OpenAI completed streaming.", flush=True)
         except Exception as e:
-            print(f"[openai_service] Racing: {provider_name} error: {e}", flush=True)
-            if provider_name == "openai":
-                err_str = str(e).lower()
-                if "quota" in err_str or "limit" in err_str or "429" in err_str or "insufficient" in err_str:
-                    global _use_local_fallback_directly
-                    _use_local_fallback_directly = True
-                    print("[openai_service] OpenAI quota limit hit. Caching local fallback direct.", flush=True)
-            with errors_lock:
-                errors.append((provider_name, e))
+            print(f"[openai_service] OpenAI error: {e}", flush=True)
+            err_msg = f"Error calling OpenAI: {e}"
+            parsed = parse_structured_response(err_msg, coding)
+            if on_chunk:
+                on_chunk("openai", parsed)
+            final_responses["openai"] = parsed
 
-            with winner_lock:
-                # If the current winner failed before completing, let the other one win
-                if winner_provider == provider_name:
-                    winner_provider = None
-
-            result_queue.put(None)
-
-    def run_openai():
-        run_stream("openai", client, config.OPENAI_CHAT_MODEL)
-
-    def run_local():
-        fallback_model = "qwen3:8b"
+    def run_gemini():
         try:
-            r = httpx.get("http://127.0.0.1:11434/api/tags", timeout=2.0)
-            if r.status_code == 200:
-                models = [m["name"] for m in r.json().get("models", [])]
-                qwen_models = [m for m in models if "qwen" in m]
-                if qwen_models:
-                    preferred = ["qwen3:8b", "qwen3:14b", "qwen3:30b", "qwen3", "qwen2.5:7b", "qwen2.5:14b", "qwen2.5:3b", "qwen2.5"]
-                    found = False
-                    for pref in preferred:
-                        if pref in qwen_models:
-                            fallback_model = pref
-                            found = True
-                            break
-                    if not found:
-                        fallback_model = qwen_models[0]
-        except Exception:
-            pass
+            print("[openai_service] Gemini call started...", flush=True)
+            if is_cancelled and is_cancelled():
+                return
 
-        local_client = OpenAI(
-            base_url="http://127.0.0.1:11434/v1",
-            api_key="ollama",
-        )
-        run_stream("local", local_client, fallback_model)
+            contents = []
+            for turn in conversation[-6:]:
+                role = "user" if turn["role"] == "user" else "model"
+                contents.append({
+                    "role": role,
+                    "parts": [{"text": turn["content"]}]
+                })
+            contents.append({
+                "role": "user",
+                "parts": [{"text": user_msg}]
+            })
 
-    global _use_local_fallback_directly
-    use_local = getattr(config, "USE_LOCAL_LLM", False)
+            body = {
+                "contents": contents,
+                "systemInstruction": {
+                    "parts": [{"text": system}]
+                },
+                "generationConfig": {
+                    "temperature": temperature,
+                    "maxOutputTokens": max_tokens
+                }
+            }
 
-    if use_local:
-        if _use_local_fallback_directly:
-            print("[openai_service] Local fallback active. Running local only.", flush=True)
-            run_local()
-            res = result_queue.get()
-            if res is not None:
-                raw = res[1]
-            else:
-                print("[openai_service] Local failed, trying OpenAI as last resort...", flush=True)
-                run_openai()
-                res = result_queue.get()
-                if res is not None:
-                    raw = res[1]
-                else:
-                    raise errors[0][1]
-        else:
-            t_openai = threading.Thread(target=run_openai, daemon=True)
-            t_local = threading.Thread(target=run_local, daemon=True)
-            t_openai.start()
-            t_local.start()
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:streamGenerateContent?alt=sse&key={config.GEMINI_API_KEY}"
+            accumulated_text = ""
+            with httpx.stream("POST", url, json=body, timeout=20.0) as response:
+                if response.status_code != 200:
+                    raise RuntimeError(f"API returned status code {response.status_code}")
+                
+                for line in response.iter_lines():
+                    if is_cancelled and is_cancelled():
+                        return
+                    if line.startswith("data:"):
+                        data_str = line[5:].strip()
+                        if not data_str:
+                            continue
+                        try:
+                            import json
+                            chunk_json = json.loads(data_str)
+                            candidates = chunk_json.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                if parts:
+                                    text_chunk = parts[0].get("text", "")
+                                    if text_chunk:
+                                        accumulated_text += text_chunk
+                                        if on_chunk:
+                                            parsed = parse_structured_response(accumulated_text, coding)
+                                            on_chunk("gemini", parsed)
+                        except Exception:
+                            pass
 
-            # Wait for the winner to finish
-            res = result_queue.get()
-            if res is not None:
-                raw = res[1]
-            else:
-                # Try the other provider if one failed
-                res = result_queue.get()
-                if res is not None:
-                    raw = res[1]
-                else:
-                    with errors_lock:
-                        raise RuntimeError(f"Both OpenAI and Local LLM failed. Errors: {errors}")
-    else:
-        run_openai()
-        res = result_queue.get()
-        if res is not None:
-            raw = res[1]
-        else:
-            with errors_lock:
-                if errors:
-                    raise errors[0][1]
-            raw = ""
+            final_responses["gemini"] = parse_structured_response(accumulated_text, coding)
+            from token_tracker import tracker_instance
+            tracker_instance.record_llm_call("gemini", config.GEMINI_MODEL, system + "\n" + user_msg, final_responses["gemini"].full_text)
+            print("[openai_service] Gemini completed streaming.", flush=True)
+        except Exception as e:
+            print(f"[openai_service] Gemini error: {e}", flush=True)
+            err_msg = f"Error calling Gemini: {e}"
+            parsed = parse_structured_response(err_msg, coding)
+            if on_chunk:
+                on_chunk("gemini", parsed)
+            final_responses["gemini"] = parsed
 
-    return parse_structured_response(raw, coding)
+    def run_claude():
+        try:
+            print("[openai_service] Claude call started...", flush=True)
+            if is_cancelled and is_cancelled():
+                return
+
+            messages = []
+            for turn in conversation[-6:]:
+                messages.append({
+                    "role": turn["role"],
+                    "content": turn["content"]
+                })
+            messages.append({
+                "role": "user",
+                "content": user_msg
+            })
+
+            headers = {
+                "x-api-key": config.CLAUDE_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+
+            body = {
+                "model": config.CLAUDE_MODEL,
+                "max_tokens": max_tokens,
+                "system": system,
+                "messages": messages,
+                "temperature": temperature,
+                "stream": True
+            }
+
+            url = "https://api.anthropic.com/v1/messages"
+            accumulated_text = ""
+            with httpx.stream("POST", url, headers=headers, json=body, timeout=20.0) as response:
+                if response.status_code != 200:
+                    raise RuntimeError(f"API returned status code {response.status_code}")
+                
+                for line in response.iter_lines():
+                    if is_cancelled and is_cancelled():
+                        return
+                    if line.startswith("data:"):
+                        data_str = line[5:].strip()
+                        if not data_str:
+                            continue
+                        try:
+                            import json
+                            chunk_json = json.loads(data_str)
+                            if chunk_json.get("type") == "content_block_delta":
+                                text_chunk = chunk_json.get("delta", {}).get("text", "")
+                                if text_chunk:
+                                    accumulated_text += text_chunk
+                                    if on_chunk:
+                                        parsed = parse_structured_response(accumulated_text, coding)
+                                        on_chunk("claude", parsed)
+                        except Exception:
+                            pass
+
+            final_responses["claude"] = parse_structured_response(accumulated_text, coding)
+            from token_tracker import tracker_instance
+            tracker_instance.record_llm_call("claude", config.CLAUDE_MODEL, system + "\n" + user_msg, final_responses["claude"].full_text)
+            print("[openai_service] Claude completed streaming.", flush=True)
+        except Exception as e:
+            print(f"[openai_service] Claude error: {e}", flush=True)
+            err_msg = f"Error calling Claude: {e}"
+            parsed = parse_structured_response(err_msg, coding)
+            if on_chunk:
+                on_chunk("claude", parsed)
+            final_responses["claude"] = parsed
+
+    if "openai" in active_providers:
+        t_openai = threading.Thread(target=run_openai, name="openai-stream-thread", daemon=True)
+        threads.append(t_openai)
+        t_openai.start()
+
+    if "gemini" in active_providers:
+        t_gemini = threading.Thread(target=run_gemini, name="gemini-stream-thread", daemon=True)
+        threads.append(t_gemini)
+        t_gemini.start()
+
+    if "claude" in active_providers:
+        t_claude = threading.Thread(target=run_claude, name="claude-stream-thread", daemon=True)
+        threads.append(t_claude)
+        t_claude.start()
+
+    import time
+    while any(t.is_alive() for t in threads):
+        if is_cancelled and is_cancelled():
+            print("[openai_service] Request cancelled. Breaking join loop.", flush=True)
+            break
+        time.sleep(0.02)
+
+    return final_responses
 
 
 def solve_from_screenshot(

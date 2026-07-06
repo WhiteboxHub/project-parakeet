@@ -108,6 +108,25 @@ class RobustMicrophoneSource:
 
     def _device_signature(self) -> tuple[int | str | None, str]:
         device_id = self._default_input_id()
+
+        # Check if it's a loopback device before querying as standard input
+        is_loopback = False
+        if device_id is not None and not isinstance(device_id, str) and sys.platform != "darwin":
+            try:
+                import pyaudiowpatch as pyaudio
+                p = pyaudio.PyAudio()
+                try:
+                    dev_info = p.get_device_info_by_index(device_id)
+                    is_loopback = dev_info.get("isLoopbackDevice", False)
+                    name = dev_info.get("name", str(device_id))
+                finally:
+                    p.terminate()
+            except Exception:
+                is_loopback = False
+
+        if is_loopback:
+            return device_id, name
+
         info = sd.query_devices(device_id, "input")
         return device_id, str(info.get("name", device_id))
 

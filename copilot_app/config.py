@@ -101,6 +101,12 @@ SMTP_USERNAME = _env("SMTP_USERNAME", "")
 SMTP_PASSWORD = _env("SMTP_PASSWORD", "")
 SMTP_USE_TLS = _env_bool("SMTP_USE_TLS", "true")
 
+GEMINI_API_KEY = _env("GEMINI_API_KEY", "")
+GEMINI_MODEL = _env("GEMINI_MODEL", "gemini-2.5-flash")
+
+CLAUDE_API_KEY = _env("CLAUDE_API_KEY", _env("ANTHROPIC_API_KEY", ""))
+CLAUDE_MODEL = _env("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
+
 
 def use_transparent_overlay() -> bool:
     return OVERLAY_TRANSPARENT
@@ -108,6 +114,25 @@ def use_transparent_overlay() -> bool:
 
 def openai_key_configured() -> bool:
     return bool(OPENAI_API_KEY) and OPENAI_API_KEY.startswith("sk-")
+
+
+def gemini_key_configured() -> bool:
+    return bool(GEMINI_API_KEY)
+
+
+def claude_key_configured() -> bool:
+    return bool(CLAUDE_API_KEY)
+
+
+def get_active_providers() -> list[str]:
+    providers = []
+    if openai_key_configured() or USE_LOCAL_LLM:
+        providers.append("openai")
+    if gemini_key_configured():
+        providers.append("gemini")
+    if claude_key_configured():
+        providers.append("claude")
+    return providers
 
 
 def env_file_path() -> Path:
@@ -152,4 +177,21 @@ INTRO_PATH = intro_path()
 def load_intro_context() -> str:
     if INTRO_PATH.exists():
         return INTRO_PATH.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def project_overview_path() -> Path:
+    p = ROOT / "project_overview.txt"
+    return p
+
+
+PROJECT_OVERVIEW_PATH = project_overview_path()
+
+
+def load_project_overview_context() -> str:
+    if PROJECT_OVERVIEW_PATH.exists():
+        try:
+            return PROJECT_OVERVIEW_PATH.read_text(encoding="utf-8").strip()
+        except Exception:
+            pass
     return ""

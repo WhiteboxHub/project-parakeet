@@ -78,6 +78,8 @@ class InterviewApp:
         self.conversation: list[dict] = []
         self._busy = False
         self._last_final_question = ""
+        self._last_question_time = 0.0
+        self._recent_candidate_speech = []
         self._force_next_coding = False
         self._pending_scan_detail = "high"
         self._watch_capture_pending = False
@@ -464,25 +466,57 @@ class InterviewApp:
             return
         self.bridge.status.emit("Role-based audio listening started")
 
+    def _get_word_similarity(self, s1: str, s2: str) -> float:
+        w1 = set(s1.lower().replace("?", "").replace(".", "").replace(",", "").split())
+        w2 = set(s2.lower().replace("?", "").replace(".", "").replace(",", "").split())
+        if not w1 or not w2:
+            return 0.0
+        return len(w1.intersection(w2)) / len(w1.union(w2))
+
     def _on_audio_transcript(self, text: str, is_final: bool, latency_ms: float = 0.0) -> None:
         text = text.strip()
         if not text:
             return
+
+        # Filter out candidate voice captured on the loopback system audio
+        if self._recent_candidate_speech:
+            is_candidate_voice = False
+            for cand_text in self._recent_candidate_speech:
+                if self._get_word_similarity(text, cand_text) > 0.45:
+                    is_candidate_voice = True
+                    break
+            if is_candidate_voice:
+                if is_final:
+                    print(f"[main] Discarded candidate speech from interviewer stream: '{text}'", flush=True)
+                return
 
         if is_final:
             from latency_tracker import tracker
             tracker.record_stt(text, is_final, latency_ms)
             tracker.record_dialogue("Interviewer", text)
 
-        if self._busy and self._last_final_question:
-            display_text = f"{self._last_final_question}\nFollow-up: {text}"
+        now = time.time()
+        time_since_last = now - self._last_question_time
+
+        is_continuation = False
+        if self._last_final_question:
+            if self._busy:
+                is_continuation = True
+            elif time_since_last < 6.0:
+                is_continuation = True
+            else:
+                last_role = self.conversation[-1]["role"] if self.conversation else None
+                if last_role == "user":
+                    is_continuation = True
+
+        if is_continuation:
+            display_text = f"{self._last_final_question} {text}"
         else:
             display_text = text
-            if is_final:
-                self._last_final_question = text
 
-        if is_final and self._busy:
+        if is_final:
             self._last_final_question = display_text
+            self._last_question_time = now
 
         self.window.set_question(display_text)
 
@@ -511,18 +545,18 @@ class InterviewApp:
             self._last_submitted_text = ""
             self._last_partial_submit_time = 0.0
 
-        force = self._force_next_coding
         if is_final:
+            force = self._force_next_coding
             self._force_next_coding = False
 
-        self._generation_request_id += 1
-        self.executor.submit(
-            self._generate_for_question,
-            display_text,
-            force,
-            self._generation_request_id,
-            is_final,
-        )
+            self._generation_request_id += 1
+            self.executor.submit(
+                self._generate_for_question,
+                display_text,
+                force,
+                self._generation_request_id,
+                is_final,
+            )
 
     def _on_candidate_transcript(self, text: str, is_final: bool) -> None:
         text = text.strip()
@@ -535,6 +569,16 @@ class InterviewApp:
 
         from latency_tracker import tracker
         tracker.record_dialogue("Candidate", text)
+        
+        try:
+            from token_tracker import tracker_instance
+            tracker_instance.record_candidate_speech(text)
+        except Exception:
+            pass
+
+        self._recent_candidate_speech.append(text)
+        if len(self._recent_candidate_speech) > 5:
+            self._recent_candidate_speech.pop(0)
 
         with self._generation_lock:
             self.conversation.append({"role": "assistant", "content": text})
@@ -554,6 +598,13 @@ class InterviewApp:
         if self._shutting_down:
             return
         self._shutting_down = True
+
+        # Write token report before sending email
+        try:
+            from token_tracker import tracker_instance
+            tracker_instance.write_report()
+        except Exception as e:
+            print(f"Error writing token report: {e}")
 
         if config.EMAIL_RECEIVER:
             try:
@@ -614,19 +665,6 @@ class InterviewApp:
         if request_id < self._generation_request_id:
             return
 
-        if is_final and include_history:
-            # Safely copy conversation under lock
-            with self._generation_lock:
-                temp_conv = list(self.conversation)
-            if temp_conv:
-                from llm_project.openai_service import is_question_linked
-                is_linked = is_question_linked(text, temp_conv)
-                if not is_linked:
-                    with self._generation_lock:
-                        if request_id == self._generation_request_id:
-                            print("[main] Context mismatch detected. Starting a new context (clearing history).", flush=True)
-                            self.conversation = []
-
         with self._generation_lock:
             if request_id < self._generation_request_id:
                 return
@@ -654,15 +692,17 @@ class InterviewApp:
             def is_cancelled():
                 return request_id < self._generation_request_id
 
-            def on_chunk(parsed_resp):
+            def on_chunk(provider, parsed_resp):
                 nonlocal ttft_ms
                 if is_cancelled():
                     return
+                if "NO_QUESTION" in parsed_resp.full_text.upper():
+                    return
                 if ttft_ms is None:
                     ttft_ms = (time.perf_counter() - start_time) * 1000
-                self.bridge.answer.emit(parsed_resp)
+                self.bridge.answer.emit({"provider": provider, "response": parsed_resp})
 
-            response = generate_answer(
+            responses = generate_answer(
                 text,
                 history,
                 force_coding,
@@ -676,15 +716,33 @@ class InterviewApp:
                 if request_id < self._generation_request_id:
                      return
 
-                if is_final:
-                    self.conversation.append({"role": "user", "content": text})
-                    self.conversation.append(
-                        {"role": "assistant", "content": response.full_text}
-                    )
-                    from latency_tracker import tracker
-                    tracker.record_llm(text, ttft_ms or tgt_ms, tgt_ms)
+                if responses:
+                    # Filter out providers that returned NO_QUESTION
+                    valid_responses = {
+                        k: v for k, v in responses.items()
+                        if "NO_QUESTION" not in v.full_text.upper()
+                    }
 
-                self.bridge.answer.emit(response)
+                    if not valid_responses:
+                        print(f"[main] Discarded non-question response matching 'NO_QUESTION' for text: '{text}'", flush=True)
+                        self.bridge.status.emit("Ready — listening...")
+                        return
+
+                    # Emit final response for all valid providers to ensure UI consistency
+                    for provider, resp in valid_responses.items():
+                        self.bridge.answer.emit({"provider": provider, "response": resp})
+
+                    primary = "openai" if "openai" in valid_responses else list(valid_responses.keys())[0]
+                    primary_response = valid_responses[primary]
+
+                    if is_final:
+                        self.conversation.append({"role": "user", "content": text})
+                        self.conversation.append(
+                            {"role": "assistant", "content": primary_response.full_text}
+                        )
+                        from latency_tracker import tracker
+                        tracker.record_llm(text, ttft_ms or tgt_ms, tgt_ms)
+
                 self.bridge.status.emit("Ready — listening...")
         except Exception as e:
             self.bridge.error.emit(format_api_error(e))
@@ -706,10 +764,11 @@ class InterviewApp:
             self.window.activateWindow()
         QTimer.singleShot(300, self.window._apply_exclude_once)
         msg = f"Ready ({plat})"
-        if config.openai_key_configured():
-            msg += " · API key OK"
+        active_providers = config.get_active_providers()
+        if active_providers:
+            msg += f" · Providers: {', '.join(p.upper() for p in active_providers)}"
         else:
-            msg += " · set OPENAI_API_KEY in interview-copilot/.env"
+            msg += " · Configure OpenAI, Gemini, or Claude in .env"
         if config.use_transparent_overlay():
             msg += " · transparent"
         else:

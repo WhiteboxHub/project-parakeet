@@ -1,199 +1,197 @@
 {
-  "selectedTemplate": 1,
-  "headings": {},
+  "selectedTemplate": 2,
+  "headings": {
+    "work": "",
+    "skills": "",
+    "projects": "",
+    "awards": "",
+    "education": "Education"
+  },
   "basics": {
-    "name": "S S Geetha Kumari M",
-    "label": "AI Engineer | MLOps Engineer | Full-Stack Engineer | Microservices & Cloud Specialist",
-    "email": "sreegeethasanya99@gmail.com",
-    "phone": "(209)-582-9312",
-    "summary": "Results-driven AI Engineer with 10+ years of progressive experience across Software Engineering, MLOps, and AI Engineering. Proven expertise in building production-grade RAG pipelines, agentic AI systems using LangGraph, MLOps infrastructure, and full-stack applications across Banking and FinTech domains. Delivered enterprise AI solutions with end-to-end ownership across data ingestion, vector search, agentic orchestration, and cloud deployment on AWS EKS. Adept at leading complex SDLC, and driving zero-defect production releases in Agile/Scrum environments.",
+    "website": "https://www.linkedin.com/in/suchitadhakate",
     "location": {
-      "address": "Pleasanton, CA"
-    }
+      "address": "Chicago, IL"
+    },
+    "name": "Suchita Dhakate",
+    "email": "suchitad1020@gmail.com",
+    "phone": "6058465677"
   },
   "education": [
     {
-      "institution": "Andhra University, India",
-      "area": "Computer Applications",
-      "studyType": "Master of Computer Applications (MCA)",
-      "startDate": "2007",
-      "endDate": "2009"
+      "area": "",
+      "studyType": "Master in Science",
+      "startDate": "June 2006",
+      "gpa": "",
+      "institution": "Nagpur University",
+      "location": "Nagpur, India",
+      "endDate": "May 2008"
+    },
+    {
+      "area": "",
+      "studyType": "Bachelor of Science",
+      "startDate": "June 2003",
+      "gpa": "",
+      "institution": "Nagpur University",
+      "location": "Nagpur, India",
+      "endDate": "June 2006"
     }
   ],
   "work": [
     {
-      "company": "Talentscreen ",
-      "position": "AI Engineer",
-      "startDate": "Jan 2025",
+      "company": "Lucid Motors",
+      "website": "",
       "endDate": "Present",
-      "summary": "Designed and delivered a production-grade AI assistant platform leveraging RAG (Retrieval-Augmented Generation) and Agentic AI patterns to power intelligent knowledge retrieval and automated action-taking workflows.",
       "highlights": [
-        "Designed and implemented a hierarchical multi-agent system using LangGraph with orchestrator and domain-specific agents to automate complex enterprise workflows",
-        "Developed stateful cyclic agent workflows supporting planning, tool execution, observation, retries, and self-correction across long-running tasks.",
-        "Integrated Model Context Protocol (MCP) servers to standardize communication between agents and enterprise APIs, databases, and automation services.",
-        "Designed and implemented a hybrid retrieval layer combining dense semantic retrieval (Milvus vector search), BM25 keyword retrieval, and graph-based retrieval for relationship-aware lookups; fused results using weighted reranking with a cross-encoder model and configurable similarity thresholds to filter irrelevant results with fallback logic.",
-        "Built ReAct-based agents with function calling capabilities for dynamic tool selection, backend execution, and adaptive decision-making.",
-        "Implemented persistent memory architecture using Milvus and PostgreSQL to maintain long-term context, workflow state, and historical interactions.",
-        "Integrated tool calling via Model Context Protocol (MCP), enabling agents to invoke external APIs, database queries, and legacy system connectors through standardized tool definitions; implemented ReAct reasoning loops for iterative planning and action, with retry logic and an eject-button fallback to human handoff after three failed attempts.",
-        "Implemented a Compliance Sentinel agent using the Producer-Critic reflection pattern to review all agent outputs before delivery to users, enforcing PII redaction, compliance-sensitive topic classification, and prompt-level restrictions; all guardrail triggers were logged to a central audit trail with tenant identifier and action metadata.",
-        "Built an end-to-end Retrieval-Augmented Generation (RAG) pipeline for enterprise knowledge retrieval using LangChain, Milvus, and open-source embedding models.",
-        "Developed document ingestion pipelines supporting PDFs, Word documents, SharePoint content, and scanned files using Apache Tika, AWS Textract, and Docling.",
-        "Developed retrieval orchestration pipelines in LangChain integrating vector search, metadata filtering, reranking, and context aggregation before LLM generation.",
-        "Designed a hybrid retrieval architecture leveraging BM25, dense embeddings, and cross-encoder reranking, resulting in more accurate context retrieval and reduced hallucinations in RAG applications.",
-        "Instrumented RAG and LangGraph workflows using Prometheus metrics, Grafana dashboards, and AWS CloudWatch for real-time monitoring of latency, retrieval quality, and agent execution performance."
-      ]
+        "Architected a hierarchical multi-agent system using LangGraph, implementing a hub-and-spoke orchestration pattern where a central Orchestrator Agent classifies user intent, verifies identity, and routes tasks to domain-specific specialist agents \u2014 enabling focused, controlled, and auditable execution across independent workflows.",
+        "Implemented the five-step ReAct agent loop (Get Mission \u2192 Scan Scene \u2192 Think It Through \u2192 Take Action \u2192 Observe and Adapt), enabling agents to plan, execute tool calls, evaluate results, and retry or escalate on failure \u2014 replacing linear pipelines with cyclic state graphs capable of self-correction.",
+        "Designed a Shared Scratchpad (Blackboard pattern) within the LangGraph state to allow the Orchestrator to write and persist multi-part execution plans before delegating to specialist agents, preventing missed steps and enabling parallel agent execution via a Fork-and-Join pattern for independent sub-tasks.",
+        "Integrated Model Context Protocol (MCP) to standardize tool definitions and agent-to-tool handoffs, exposing backend APIs and database queries as structured, callable tool schemas consumable by any agent in the system without hard-coded integrations.",
+        "Implemented Human-in-the-Loop (HITL) checkpoints natively within the LangGraph workflow graph, pausing execution at high-stakes actions and requiring explicit human confirmation before any write or transactional operation was committed to backend systems.",
+        "Built a Compliance Sentinel agent using the Producer-Critic reflection pattern, where domain agents generated outputs (Producer) and the Sentinel independently evaluated each response for PII exposure, policy violations, and unsafe content (Critic) before releasing to the user \u2014 with redact, reject, or regenerate logic on violation.",
+        "Implemented a tiered exception handling and self-correction mechanism: on tool failure (e.g., API timeout), agents entered a recovery loop with retry logic; after three consecutive failures or a high-stakes action attempt, the system triggered an automatic human handoff, passing the full Blackboard context to the live agent to avoid restarts.",
+        "Designed a three-tier memory architecture \u2014 Shared Graph State (Postgres) for active workflow variables, a Summarization Agent for rolling context window compression, and a Long-Term Vector Index for longitudinal recall \u2014 ensuring agents retained context across multi-turn sessions without exceeding token limits.",
+        "Designed and enforced a four-layer security architecture: input sandboxing via a pre-flight classifier to neutralize prompt injection attempts, identity propagation requiring user-scoped tokens on every API call, tiered autonomy controls that halted looping agents after three failed steps, and full audit trail logging of every plan, tool call, and result for compliance traceability.",
+        "Designed and implemented structured Pydantic output schemas for agent responses, enforcing type-safe routing decisions and tool call parameters across all agents to prevent malformed instructions from reaching backend systems.",
+        "Developed evaluation pipelines using BERTScore and LLM-as-a-Judge techniques to systematically measure response coherence, factual accuracy, and contextual alignment; tracked tool-call accuracy (correct tool selection and parameter usage) and unauthorized action rate as agent-specific evaluation metrics.",
+        "Led the development of an enterprise-grade Retrieval-Augmented Generation (RAG) system to enhance knowledge accessibility and decision support, addressing fragmented information retrieval across internal documentation and technical reports.",
+        "Implemented a foundational RAG architecture integrating LLMs for grounded, context-aware responses \u2014 combining retrieval-based reasoning with generative capabilities to ensure factual and explainable outputs.",
+        "Designed robust data ingestion and preprocessing pipelines to extract, clean, and chunk documents from diverse sources (PDFs, Confluence, and API data), enabling efficient embedding and retrieval.",
+        "Utilized FAISS as the primary vector database for high-performance semantic similarity search, optimizing index structures for fast retrieval and scalable embedding storage.",
+        "Implemented a hybrid retriever strategy combining dense (FAISS) and sparse (BM25) retrieval methods, further enhanced with crossencoder rerankers to boost result relevance and response grounding.",
+        "Utilized LangChain's prompt templating and chaining framework to build modular and dynamic query-response flows, allowing flexible orchestration of retrievers, LLMs, and post-processing tools.",
+        "Leveraged Amazon Bedrock, OpenAI, and Anthropic Claude for LLM generation, enabling scalable, low-latency text synthesis through secure and optimized model endpoints.",
+        "Integrated observability and monitoring using LangFuse and AWS CloudWatch to trace pipeline performance, latency, and model behavior for continuous optimization.",
+        "Containerized services with Docker and deployed them on AWS EKS with GitOps automation via Argo CD, ensuring scalable, resilient, and continuously deployed AI infrastructure."
+      ],
+      "position": "AI Engineer",
+      "location": "Newark, CA",
+      "startDate": "Jan 2023"
     },
     {
-      "company": "Cognizant Technology Solutions (Client: Wells Fargo \u2013 Client Transaction Hub)",
-      "position": "Software/MLOps Engineer",
-      "startDate": "Aug 2023",
-      "endDate": "Dec 2024",
-      "summary": "Led MLOps infrastructure and pipeline engineering for the Client Transaction Hub (CTH), establishing a production-grade ML platform for data versioning, feature engineering, pipeline orchestration, model deployment, and system observability.",
       "highlights": [
-        "Implemented DVC-based data versioning integrated with S3 as the remote storage backend, enabling reproducible pipeline runs by tracking dataset checksums in Git and linking each MLflow experiment run to the exact data version used; automated raw data ingestion pipelines from Oracle 19C to S3 with scheduled batch archival workflows.",
-        "Designed and deployed a Feature Store architecture with an offline store backed by S3/Parquet for historical training data and an online store using Redis for low-latency feature retrieval during inference; enforced shared feature transformation definitions across training and serving environments to prevent training-serving skew.",
-        "Orchestrated end-to-end ML workflows using Apache Airflow with SLA monitoring, automatic retries, and alerting; reduced manual intervention by 95% through scheduled job automation.",
-        "Deployed a centralized MLflow Tracking Server backed by RDS for metadata and S3 for artifacts; standardized experiment logging across all pipeline runs; governed the model lifecycle through Staging, Validation, and Production promotion workflows with automated integration tests and latency checks.",
-        "Built CI/CD pipelines for ML systems using Jenkins and Docker, automating training pipeline triggers on code merges and data updates; deployment pipelines built Docker images containing FastAPI inference services, pushed to Amazon ECR, and updated EKS Kubernetes deployment manifests with new image tags.",
-        "Engineered a model A/B testing infrastructure at the deployment layer using canary release patterns on EKS, enabling controlled traffic splitting between pipeline versions; monitored rollout health through CloudWatch alarms and automated rollback triggers.",
-        "Managed containerized services on Amazon EKS with horizontal pod autoscaling for traffic spike handling and self-healing configuration; maintained environment parity across Dev, Staging, and Production using Docker image pinning and infrastructure-as-code deployment manifests.",
-        "Enforced RBAC access controls on the platform, restricting production deployment permissions to approved roles; maintained full audit trails linking every request back to the model registry version, dataset DVC hash, and code commit for compliance and explainability requirements."
-      ]
+        "Designed and implemented end-to-end machine learning pipelines for real-time applications, integrating automated model training, validation, deployment, and monitoring to ensure high performance and scalability.",
+        "Built scalable data ingestion and processing workflows with automated storage solutions to support continuous model updates and efficient data management.",
+        "Automated the complete ML pipeline using MLflow, streamlining workflows, reducing manual effort, and improving model versioning and deployment efficiency.",
+        "Developed deep learning workflows integrated with MLflow for experiment tracking and leveraged hyperparameter tuning frameworks to enhance model performance.",
+        "Assessed model performance using Scikit-learn metrics and cross-validation, and optimized model robustness and generalization through extensive hyperparameter tuning with Optuna and Ray Tune.",
+        "Deployed machine learning models on AWS SageMaker Endpoints and served predictions via FastAPI, enabling real-time, scalable, API-driven inference.",
+        "Utilized Amazon S3 for managing processed logs, training datasets, and model artifacts, and integrated AWS CloudWatch for real-time system monitoring and performance tracking."
+      ],
+      "company": "CIGNA Health Insurance",
+      "position": "Software Engineer / Mlops",
+      "endDate": "December 2022",
+      "startDate": "Oct 2021",
+      "location": "Irvine, CA"
     },
     {
-      "company": "Capgemini (Client: 21st Century Insurance \u2013 Farmers Insurance Group)",
-      "position": "Senior Software Engineer",
-      "startDate": "Mar 2021",
-      "endDate": "Jul 2023",
-      "summary": "Developed a unified web services platform for 21st Century Insurance, enabling channel integration for the Call Center Sales project serving customers across 48 U.S. states.",
       "highlights": [
-        "Delivered all project modules with 0 production defects, meeting strict quality benchmarks in an Agile/Scrum delivery model.",
-        "Designed and developed 10+ RESTful microservices using JAX-RS and Jersey framework, supporting channel integration for digital and call center sales platforms.",
-        "Identified bounded contexts and built decoupled micro-frontends and microservices for the Digital channel, reducing inter-system dependency and improving deployability.",
-        "Applied enterprise design patterns (Singleton, Factory, Abstract Factory, Decorator, Business Delegate) to standardize architecture across the application suite.",
-        "Leveraged core Java concepts \u2014 Collections, Multithreading, OOP, Exception Handling \u2014 to develop robust, production-grade application modules.",
-        "Implemented Hibernate Validation framework for front-end validation and ORM-based persistence, reducing data integrity issues in form submissions.",
-        "Developed UI components using JSP, JavaScript, and jQuery; contributed to full SDLC from requirements gathering through client delivery.",
-        "Participated in code reviews, enforced coding standards, and mentored junior engineers on design patterns and service decomposition best practices.",
-        "Collaborated with QA teams to define integration test plans and automated test suites using JUnit and TestNG, ensuring end-to-end service reliability before production releases."
-      ]
-    },
-    {
-      "company": "Capgemini (Client: Discover Financial Services \u2013 Atlas Project)",
-      "position": "Associate Software Engineer",
-      "startDate": "Sep 2017",
-      "endDate": "Feb 2021",
-      "summary": "Built and enhanced the Atlas account origination platform for Discover Financial Services, serving nearly 50 million cardholders across savings, money market, and IRA account workflows.",
-      "highlights": [
-        "Developed Spring Web Services to integrate mainframe IMS transactions, enabling real-time access to legacy customer data for banking agents.",
-        "Implemented 2 new Angular.js + Bootstrap UI screens (Backorder and Supplemental Back Order Report), improving agent workflow efficiency in account management.",
-        "Completed end-to-end mainframe integration testing by connecting IBM MQ from local development environment, validating message queue reliability.",
-        "Engineered Hibernate ORM layer for Oracle database transactions; wrote complex SQL queries including joins, subqueries, and correlated subqueries.",
-        "Generated DDL scripts for new database objects \u2014 tables, views, sequences, functions, triggers, packages, and stored procedures \u2014 supporting account origination business logic.",
-        "Led full SDLC for multiple Change Requests; handled UML design, coding, and enhancement lifecycle for all assigned work products.",
-        "Applied Java multithreading for parallel processing, improving throughput for concurrent customer account operations.",
-        "Contributed to peer code reviews, identifying defects early in the development cycle and ensuring adherence to coding standards across the team."
-      ]
-    },
-    {
-      "company": "Capgemini (Client: SCOPE International \u2013 Standard Chartered Bank)",
+        "Built patient-facing and provider-facing healthcare applications using React.js, Node.js, and TypeScript to improve accessibility and usability.",
+        "Designed and deployed cloud-native applications on Google Cloud Platform (GCP), utilizing Cloud Run, Pub/Sub, and Cloud Functions.",
+        "Worked on secure health data pipelines (HIPAA compliant), ensuring sensitive data integrity with GCP encryption and IAM policies.",
+        "Implemented automated testing frameworks (Cypress, Jest, Mocha) to improve code quality and reduce release issues.",
+        "Modernized legacy monolith services into microservices deployed with Kubernetes (GKE).",
+        "Designed real-time healthcare event tracking using Pub/Sub and Cloud Functions, enabling faster alerts and notifications.",
+        "Creation of Docker Images with the features which are required to run any browser tests and push it to Artifactory with the latest version tag.",
+        "Write code in groovy and create global functions which can be used in Jenkins file for the Jenkins instance.",
+        "Develop and maintain multiple branch pipelines for each project for CI/CD Jenkins.",
+        "Collaborated with cross-functional teams in Agile/Scrum environment, delivering high-quality and efficient releases.",
+        "Worked closely with product managers and stakeholders to refine features supporting patient well-being."
+      ],
+      "company": "Rally Health",
       "position": "Software Engineer",
-      "startDate": "Feb 2015",
-      "endDate": "Aug 2017",
-      "summary": "Contributed to the ISIS (Information Systems Integration Services) hub, which integrates financial applications across Standard Chartered Bank's Hong Kong and UK operations.",
+      "location": "San Francisco, California",
+      "startDate": "June 2018",
+      "endDate": "Sep 2021"
+    },
+    {
+      "company": "Whitebox-Learning",
+      "website": "",
+      "endDate": "May 2018",
       "highlights": [
-        "Developed and deployed IBM MQ message flows enabling end-to-end file transfer and online messaging across geographically distributed banking applications.",
-        "Served as WTX developer, designing Type Trees and building transformation maps for inter-application data translation and message routing.",
-        "Built and enhanced JSP pages, HTML interfaces, and Java Servlets to support internal portal and client-facing web applications.",
-        "Performed deployment, debugging, and unit testing of message flows, maintaining 99%+ uptime for critical inter-application connectivity.",
-        "Collaborated cross-functionally with client teams daily to deliver solutions for complex business integration requirements on schedule.",
-        "Conducted code reviews to identify and resolve bugs, contributing to improved software quality and reduced regression defects across the integration platform."
-      ]
+        "Utilized Next.js to create a dynamic, responsive website with server-side rendering, ensuring fast load times and SEO optimization for improved user engagement.",
+        "Built the backend using Node.js, implementing RESTful APIs to handle data retrieval and interactions between the frontend and SQL database.",
+        "Designed and implemented an SQL database to manage and store company data securely, ensuring efficient data retrieval and scalability."
+      ],
+      "position": "Software Engineer",
+      "location": "Dublin, CA",
+      "startDate": "Apr 2016"
     }
   ],
   "skills": [
     {
-      "name": "LLM & GenAI ",
+      "name": "Languages",
+      "level": "",
       "keywords": [
-        "LangGraph",
-        "LangChain",
-        "RAG Pipelines",
-        "Agentic AI",
-        "Tool Calling ",
-        "Claude Sonnet"
+        "Python, Java, JavaScript"
       ]
     },
     {
-      "name": "NLP & Retrieval",
       "keywords": [
-        "Hybrid Retrieval",
-        "BM25",
-        "Docling",
-        "Sentence Transformers",
-        "RAGAS",
-        "DeepEval"
-      ]
+        "PyTorch, MLflow"
+      ],
+      "name": "Frameworks"
     },
     {
-      "name": "Vector Databases",
       "keywords": [
-        "Milvus",
-        "FAISS",
-        "Chroma DB",
-        "Pinecone"
-      ]
+        "Langchain, LangGraph, LlamaIndex, NLTK, Transformers, Scikit-learn, NumPy, Pandas, HuggingFace, Pydantic AI"
+      ],
+      "name": "Libraries"
     },
     {
-      "name": "MLOps & DevOps",
       "keywords": [
-        "DVC ",
-        "MLflow ",
-        "Apache Airflow ",
-        "GitLab CI/CD ",
-        "Docker",
-        "Kubernetes",
-        "AWS (EC2, Bedrock)"
-      ]
+        "Anthropic Claude, OpenAI, BERT, LLaMA, BART"
+      ],
+      "name": "LLMs"
     },
     {
-      "name": "Observability",
       "keywords": [
-        "Langfuse",
-        "CloudWatch",
-        "Grafana",
-        "Prometheus"
-      ]
+        "SQL, PostgreSQL, MongoDB, Redis, DynamoDB"
+      ],
+      "name": "Database"
     },
     {
-      "name": "Programming Languages",
       "keywords": [
-        "Python",
-        "Java",
-        "JavaScript"
-      ]
+        "EKS, Bedrock, RDS, EC2, CloudWatch, Lambda, S3, SageMaker, QuickSight"
+      ],
+      "name": "AWS"
     },
     {
-      "keywords": []
-    },
-    {
-      "name": "Databases",
       "keywords": [
-        "PostgreSQL",
-        "MySQL",
-        "MongoDB",
-        "Redis"
-      ]
+        "ChromaDB, PgVector, MilvusDB, FAISS"
+      ],
+      "name": "VectorDB"
     },
     {
-      "keywords": []
+      "keywords": [
+        "Hierarchical Orchestration, ReAct Loop, Hub-and-Spoke, Producer-Critic Reflection, Fork-and-Join, Blackboard Pattern, Human-in-the-Loop, MCP (Model Context Protocol)"
+      ],
+      "name": "Agentic Patterns"
+    },
+    {
+      "keywords": [
+        "LangFuse, AWS CloudWatch, Argo CD, Docker, FastAPI"
+      ],
+      "name": "Observability & DevOps"
     }
   ],
   "projects": [
     {
-      "keywords": []
+      "name": "",
+      "description": "",
+      "url": "",
+      "keywords": [
+        ""
+      ]
     }
   ],
-  "awards": [],
+  "awards": [
+    {
+      "title": "",
+      "date": "",
+      "awarder": "",
+      "summary": ""
+    }
+  ],
   "sections": [
     "templates",
     "profile",

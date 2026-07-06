@@ -30,9 +30,9 @@ def _see_through_mode() -> bool:
 def _glass_colors() -> dict[str, str]:
     if _see_through_mode():
         return {
-            "panel": "transparent",
-            "strip": "transparent",
-            "input": "transparent",
+            "panel": "rgba(255, 255, 255, 1)",
+            "strip": "rgba(255, 255, 255, 1)",
+            "input": "rgba(255, 255, 255, 1)",
             "hover": "rgba(255, 255, 255, 25)",
             "border": BORDER_SOFT,
         }

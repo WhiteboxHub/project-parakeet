@@ -263,8 +263,12 @@ class OverlayWindow(QMainWindow):
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         else:
             self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
-        self.setMinimumSize(420, 320)
-        self.resize(680, 520)
+        active_cnt = len(config.get_active_providers())
+        min_w = 420 if active_cnt <= 1 else (650 if active_cnt == 2 else 900)
+        self.setMinimumSize(min_w, 320)
+
+        default_w = 680 if active_cnt <= 1 else (950 if active_cnt == 2 else 1200)
+        self.resize(default_w, 520)
 
         central = QWidget()
         central.setObjectName("panel")
@@ -303,7 +307,7 @@ class OverlayWindow(QMainWindow):
         self.btn_watch.toggled.connect(self._on_watch_toggle)
         header.addWidget(self.btn_watch)
 
-        self.btn_resume = QPushButton("Resume JSON")
+        self.btn_resume = QPushButton("Update Resume")
         self.btn_resume.setObjectName("ghost")
         self.btn_resume.clicked.connect(self._on_resume_click)
         header.addWidget(self.btn_resume)
@@ -338,36 +342,72 @@ class OverlayWindow(QMainWindow):
         self._make_see_through_edit(self.question_box)
         layout.addWidget(self.question_box)
 
-        self.approach_label = QLabel("What to say (approach)")
-        self.approach_label.setObjectName("section")
-        layout.addWidget(self.approach_label)
-        self.answer_box = QTextEdit()
-        self.answer_box.setReadOnly(True)
-        self._make_see_through_edit(self.answer_box)
-        layout.addWidget(self.answer_box, stretch=1)
+        self.providers_layout = QHBoxLayout()
+        layout.addLayout(self.providers_layout, stretch=1)
 
-        code_header = QHBoxLayout()
-        code_header.addWidget(QLabel("Code", objectName="section"))
-        code_header.addStretch()
-        self.btn_copy = QPushButton("Copy code")
-        self.btn_copy.setObjectName("primary")
-        self.btn_copy.clicked.connect(self._on_copy_click)
-        code_header.addWidget(self.btn_copy)
+        self.columns = {}
+        active = config.get_active_providers()
+        if not active:
+            no_key_lbl = QLabel(
+                "Please configure at least one API key (OPENAI_API_KEY, GEMINI_API_KEY, or CLAUDE_API_KEY) in .env to use the copilot."
+            )
+            no_key_lbl.setWordWrap(True)
+            no_key_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.providers_layout.addWidget(no_key_lbl)
+        else:
+            for provider in active:
+                col_widget = QWidget()
+                col_layout = QVBoxLayout(col_widget)
+                col_layout.setContentsMargins(0, 0, 0, 0)
+                col_layout.setSpacing(8)
 
-        self.code_section = QWidget()
-        self._make_translucent_widget(self.code_section)
-        csl = QVBoxLayout(self.code_section)
-        csl.setContentsMargins(0, 0, 0, 0)
-        csl.addLayout(code_header)
-        self.code_box = QPlainTextEdit()
-        self.code_box.setReadOnly(True)
-        self._make_see_through_edit(self.code_box)
-        mono = QFont("Menlo" if config.IS_MAC else "Consolas", 16)
-        self.code_box.setFont(mono)
-        self.code_box.setMaximumHeight(200)
-        csl.addWidget(self.code_box)
-        layout.addWidget(self.code_section)
-        self.code_section.hide()
+                header_lbl = QLabel(f"{provider.capitalize()} Answer", objectName="section")
+                col_layout.addWidget(header_lbl)
+
+                answer_box = QTextEdit()
+                answer_box.setReadOnly(True)
+                self._make_see_through_edit(answer_box)
+                col_layout.addWidget(answer_box, stretch=1)
+
+                code_sec = QWidget()
+                self._make_translucent_widget(code_sec)
+                code_layout = QVBoxLayout(code_sec)
+                code_layout.setContentsMargins(0, 0, 0, 0)
+
+                code_header = QHBoxLayout()
+                code_header.addWidget(QLabel("Code", objectName="section"))
+                code_header.addStretch()
+
+                btn_copy = QPushButton("Copy code")
+                btn_copy.setObjectName("primary")
+                code_header.addWidget(btn_copy)
+                code_layout.addLayout(code_header)
+
+                code_box = QPlainTextEdit()
+                code_box.setReadOnly(True)
+                self._make_see_through_edit(code_box)
+                mono = QFont("Menlo" if config.IS_MAC else "Consolas", 16)
+                code_box.setFont(mono)
+                code_box.setMaximumHeight(200)
+                code_layout.addWidget(code_box)
+
+                col_layout.addWidget(code_sec)
+                code_sec.hide()
+
+                # Save references before connecting
+                self.columns[provider] = {
+                    "widget": col_widget,
+                    "header": header_lbl,
+                    "answer_box": answer_box,
+                    "code_section": code_sec,
+                    "code_box": code_box,
+                    "btn_copy": btn_copy
+                }
+
+                # Bind the specific code_box to copy function
+                btn_copy.clicked.connect(lambda checked, cb=code_box: self._on_copy_provider_code(cb))
+
+                self.providers_layout.addWidget(col_widget)
 
         hint = QLabel("Hover + scroll here · drag top bar to move · Ctrl+H hide")
         hint.setObjectName("hint")
@@ -385,28 +425,33 @@ class OverlayWindow(QMainWindow):
         self._install_edge_filters(central)
         if config.STEALTH_FOCUS:
             self._apply_stealth_focus(central)
+
         see_through = config.GLASS_SEE_THROUGH and self._transparent
         if see_through:
-            for w in (
+            widgets = [
                 self.findChild(QLabel, "title"),
                 self.status_label,
-                self.approach_label,
                 self.findChild(QLabel, "hint"),
                 self.question_box,
-                self.answer_box,
-                self.code_box,
-            ):
+            ]
+            for col in self.columns.values():
+                widgets.append(col["header"])
+                widgets.append(col["answer_box"])
+                widgets.append(col["code_box"])
+            for w in widgets:
                 if w is not None:
                     self._apply_text_halo(w)
             for w in central.findChildren(QLabel, "section"):
                 self._apply_text_halo(w)
         elif self._transparent:
-            for w in (
+            widgets = [
                 self.findChild(QLabel, "title"),
                 self.status_label,
-                self.approach_label,
                 self.findChild(QLabel, "hint"),
-            ):
+            ]
+            for col in self.columns.values():
+                widgets.append(col["header"])
+            for w in widgets:
                 if w is not None:
                     self._apply_text_halo(w)
             for w in central.findChildren(QLabel, "section"):
@@ -424,18 +469,17 @@ class OverlayWindow(QMainWindow):
 
     def _make_translucent_widget(self, widget: QWidget) -> None:
         if self._transparent:
-            widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
             widget.setAutoFillBackground(False)
 
     def _make_see_through_edit(self, edit: QTextEdit | QPlainTextEdit) -> None:
         """Force text areas transparent with a strong text outline/halo so it works on any background."""
         self._make_translucent_widget(edit)
         pal = edit.palette()
-        pal.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0, 0))
+        pal.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0, 1))
         pal.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
         edit.setPalette(pal)
         edit.setStyleSheet(
-            "background: transparent; background-color: transparent; border: none; color: #FFFFFF;"
+            "background: rgba(0, 0, 0, 1); background-color: rgba(0, 0, 0, 1); border: none; color: #FFFFFF;"
         )
         self._apply_text_halo(edit)
 
@@ -443,19 +487,27 @@ class OverlayWindow(QMainWindow):
         """Hover + wheel scroll without focusing the overlay (keeps coding tab active)."""
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         central.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        for box in (self.question_box, self.answer_box, self.code_box):
+
+        boxes = [self.question_box]
+        for col in self.columns.values():
+            boxes.append(col["answer_box"])
+            boxes.append(col["code_box"])
+
+        for box in boxes:
             box.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             box.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-        for btn in (
+
+        buttons = [
             self.btn_coding,
             self.btn_scan,
             self.btn_watch,
             self.btn_resume,
             self.btn_intro,
             self.btn_listen,
-            self.btn_copy,
             self.btn_close,
-        ):
+        ] + [col["btn_copy"] for col in self.columns.values()]
+
+        for btn in buttons:
             btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
     def _scroll_target_at(self, global_pos: QPoint) -> QTextEdit | QPlainTextEdit | None:
@@ -521,23 +573,20 @@ class OverlayWindow(QMainWindow):
     def eventFilter(self, obj, event) -> bool:
         et = event.type()
 
-        if et == QEvent.Type.Wheel and isinstance(event, QWheelEvent) and config.STEALTH_FOCUS:
+        if et == QEvent.Type.Wheel and isinstance(event, QWheelEvent):
             target = self._scroll_target_at(event.globalPosition().toPoint())
             if target is not None:
                 self._apply_wheel_scroll(target, event.angleDelta().y())
-                event.accept()
-                return True
+            event.accept()
+            return True
 
         return False
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        if config.STEALTH_FOCUS:
-            target = self._scroll_target_at(event.globalPosition().toPoint())
-            if target is not None:
-                self._apply_wheel_scroll(target, event.angleDelta().y())
-                event.accept()
-                return
-        super().wheelEvent(event)
+        target = self._scroll_target_at(event.globalPosition().toPoint())
+        if target is not None:
+            self._apply_wheel_scroll(target, event.angleDelta().y())
+        event.accept()
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -779,8 +828,8 @@ class OverlayWindow(QMainWindow):
                 self.show()
             self.schedule_exclude()
 
-    def _on_copy_click(self) -> None:
-        code = self.code_box.toPlainText().strip()
+    def _on_copy_provider_code(self, code_box) -> None:
+        code = code_box.toPlainText().strip()
         if code:
             QGuiApplication.clipboard().setText(code)
             self.status_label.setText("Code copied")
@@ -804,7 +853,15 @@ class OverlayWindow(QMainWindow):
             self._saved_normal_geometry = self.geometry()
         self._layout_mode = "coding"
         margin = 10
-        width = min(500, max(360, int(avail.width() * 0.34)))
+        
+        num_cols = len(self.columns)
+        if num_cols == 3:
+            width = min(1200, max(900, int(avail.width() * 0.6)))
+        elif num_cols == 2:
+            width = min(900, max(680, int(avail.width() * 0.45)))
+        else:
+            width = min(500, max(360, int(avail.width() * 0.34)))
+
         self.setGeometry(
             avail.x() + margin,
             avail.y() + margin,
@@ -812,7 +869,8 @@ class OverlayWindow(QMainWindow):
             avail.height() - 2 * margin,
         )
         self.question_box.setMaximumHeight(56)
-        self.code_box.setMaximumHeight(16_777_215)
+        for col in self.columns.values():
+            col["code_box"].setMaximumHeight(16_777_215)
 
     def apply_normal_layout(self) -> None:
         """Restore compact window after behavioral / non-coding answers."""
@@ -820,27 +878,38 @@ class OverlayWindow(QMainWindow):
             if self._saved_normal_geometry is not None:
                 self.setGeometry(self._saved_normal_geometry)
             else:
-                self.resize(680, 520)
+                num_cols = len(self.columns)
+                normal_w = 680 if num_cols <= 1 else (950 if num_cols == 2 else 1200)
+                self.resize(normal_w, 520)
                 self.move(80, 80)
         self._layout_mode = "normal"
         self.question_box.setMaximumHeight(72)
-        self.code_box.setMaximumHeight(self._code_box_max_default)
+        for col in self.columns.values():
+            col["code_box"].setMaximumHeight(self._code_box_max_default)
 
-    def _set_response(self, response: ParsedResponse) -> None:
+    def _set_response(self, data: dict) -> None:
+        if not isinstance(data, dict):
+            return
+        provider = data.get("provider")
+        response = data.get("response")
+        if provider not in self.columns:
+            return
+
+        col = self.columns[provider]
         if (response.is_coding or response.code) and self.btn_coding.isChecked():
-            self.code_section.show()
-            self.approach_label.setText("What to say (approach)")
-            self.answer_box.setPlainText(response.approach or response.full_text)
-            self.code_box.setPlainText(response.code)
+            col["code_section"].show()
+            col["header"].setText(f"{provider.capitalize()} (Approach)")
+            col["answer_box"].setPlainText(response.approach or response.full_text)
+            col["code_box"].setPlainText(response.code)
             self.apply_coding_layout()
         else:
-            self.code_section.hide()
-            self.approach_label.setText("Suggested answer")
+            col["code_section"].hide()
+            col["header"].setText(f"{provider.capitalize()} Answer")
             full_content = response.full_text
             if response.code and not self.btn_coding.isChecked():
                 if "```" not in full_content:
                     full_content += f"\n\nCode:\n```{config.CODE_LANGUAGE}\n{response.code}\n```"
-            self.answer_box.setPlainText(full_content)
+            col["answer_box"].setPlainText(full_content)
             self.btn_coding.setChecked(False)
             self.apply_normal_layout()
         self.schedule_exclude()
@@ -888,7 +957,12 @@ class OverlayWindow(QMainWindow):
         color_str = "#000000" if is_light_bg else "#FFFFFF"
         shadow_color = QColor(255, 255, 255, 255) if is_light_bg else QColor(0, 0, 0, 255)
 
-        for box in (self.question_box, self.answer_box, self.code_box):
+        boxes = [self.question_box]
+        for col in self.columns.values():
+            boxes.append(col["answer_box"])
+            boxes.append(col["code_box"])
+
+        for box in boxes:
             box.setStyleSheet(
                 f"background: transparent; background-color: transparent; border: none; color: {color_str};"
             )
