@@ -20,3 +20,12 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+# PyInstaller Build Output
+build/
+dist/
+
+# Auto-generated Reports and Transcripts
+interview_transcript*.md
+latency_report*.md
+token_report*.md
