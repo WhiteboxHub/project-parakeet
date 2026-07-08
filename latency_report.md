@@ -1,14 +1,14 @@
 # Latency Analysis Report
 
-*Last updated: 2026-07-06 12:55:08*
+*Last updated: 2026-07-06 13:23:57*
 
 ## Summary Statistics
 
 | Metric | Average Latency | Count |
 | :--- | :--- | :--- |
-| **Speech-to-Text (STT)** | 29.37 s (29369.6 ms) | 8 |
-| **LLM Time-to-First-Token (TTFT)** | 0.77 s (771.1 ms) | 4 |
-| **LLM Total Generation Time (TGT)** | 2.71 s (2714.8 ms) | 4 |
+| **Speech-to-Text (STT)** | 83.90 s (83903.5 ms) | 11 |
+| **LLM Time-to-First-Token (TTFT)** | 0.00 s (0.0 ms) | 0 |
+| **LLM Total Generation Time (TGT)** | 0.00 s (0.0 ms) | 0 |
 
 ## Detailed Logs
 
@@ -16,20 +16,18 @@
 
 | Timestamp | Transcript | Latency |
 | :--- | :--- | :--- |
-| 12:55:05 | `just let me know. I'm always here to continue the conversation when you're ready.` | 54.36 s (54360.0 ms) |
-| 12:55:02 | `If there's anything else you want to delve into later,` | 51.36 s (51360.0 ms) |
-| 12:54:48 | `scalable and compliant with any regulations or company policies?` | 37.34 s (37344.0 ms) |
-| 12:54:46 | `experience when implementing AI systems, how did you ensure they were both` | 35.02 s (35016.0 ms) |
-| 12:54:42 | `Certainly. In your PASS` | 31.31 s (31313.0 ms) |
-| 12:54:22 | `What was the biggest technical challenge you overcame?` | 11.22 s (11219.0 ms) |
-| 12:54:19 | `What was one of the key projects you led?` | 8.33 s (8329.0 ms) |
-| 12:54:17 | `Of course, let's start with your most recent role.` | 6.02 s (6016.0 ms) |
+| 13:23:57 | `If you ever wanna practice again or discuss anything else, I'll be here.` | 177.41 s (177406.0 ms) |
+| 13:23:54 | `You're welcome.` | 174.20 s (174203.0 ms) |
+| 13:23:26 | `If you wanna give it another shot or if there's anything else on your mind,` | 146.53 s (146531.0 ms) |
+| 13:23:22 | `No worries at all.` | 142.52 s (142516.0 ms) |
+| 13:22:18 | `Take care.` | 78.27 s (78266.0 ms) |
+| 13:22:17 | `practice round or have any other questions, just let me know.` | 77.28 s (77281.0 ms) |
+| 13:22:14 | `I'm glad you found this helpful. If you ever wanna do another` | 74.19 s (74188.0 ms) |
+| 13:21:18 | `Keep it under three minutes.` | 17.84 s (17844.0 ms) |
+| 13:21:16 | `Why you transitioned into Gen AI? Two projects you've built and the biggest technical challenge you solved.` | 16.14 s (16141.0 ms) |
+| 13:21:10 | `Tell me about yourself in the context of your AI journey.` | 10.20 s (10203.0 ms) |
+| 13:21:08 | `Perfect. Let's kick things off.` | 8.36 s (8360.0 ms) |
 
 ### LLM Answering Latencies
 
-| Timestamp | Question Prompt | Time-to-First-Token (TTFT) | Total Generation Time (TGT) |
-| :--- | :--- | :--- | :--- |
-| 12:55:08 | `If there's anything else you want to delve into later, just ...` | 0.73 s (728.6 ms) | 2.33 s (2329.8 ms) |
-| 12:55:05 | `If there's anything else you want to delve into later,...` | 0.78 s (782.4 ms) | 2.41 s (2407.3 ms) |
-| 12:54:51 | `Certainly. In your PASS experience when implementing AI syst...` | 0.69 s (694.2 ms) | 2.86 s (2863.4 ms) |
-| 12:54:25 | `Of course, let's start with your most recent role. What was ...` | 0.88 s (879.0 ms) | 3.26 s (3258.8 ms) |
+*No answer generation events recorded yet.*

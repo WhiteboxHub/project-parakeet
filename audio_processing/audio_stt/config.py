@@ -32,10 +32,10 @@ class AudioSTTConfig:
     enable_normalization: bool = True
     allow_component_fallback: bool = True
     allow_openai_stt: bool = False
-    dhwani_server_url: str = "ws://127.0.0.1:8000"
-    dhwani_provider: str = "openai"
-    dhwani_openai_key: str = ""
-    dhwani_deepgram_key: str = ""
+    speech_to_text_server_url: str = "ws://127.0.0.1:8000"
+    speech_to_text_provider: str = "openai"
+    speech_to_text_openai_key: str = ""
+    speech_to_text_deepgram_key: str = ""
     disable_llm_cleaning: bool = True
 
     def __post_init__(self) -> None:

@@ -107,5 +107,11 @@ class LatencyTracker:
         except Exception as e:
             print(f"Error writing dialogue report: {e}")
 
+    def set_dynamic_filepaths(self, candidate_name: str, timestamp: str):
+        root = Path(__file__).resolve().parent
+        safe_name = "".join(c for c in candidate_name if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+        self.filepath = root / f"latency_report_{safe_name}_{timestamp}.md"
+        self.dialogue_filepath = root / f"interview_transcript_{safe_name}_{timestamp}.md"
+
 # Global instance
 tracker = LatencyTracker()

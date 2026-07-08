@@ -247,8 +247,8 @@ def pcm16_to_wav_bytes(pcm16: bytes, sample_rate: int = 16000) -> bytes:
     return buf.read()
 
 
-class DhwaniSTTProvider:
-    name = "dhwani"
+class SpeechToTextSTTProvider:
+    name = "speech_to_text"
 
     def __init__(self, config: AudioSTTConfig):
         self._config = config
@@ -275,7 +275,7 @@ class DhwaniSTTProvider:
 
         self._thread = threading.Thread(
             target=self._run_loop,
-            name="stt-dhwani",
+            name="stt-speech-to-text",
             daemon=True,
         )
         self._thread.start()
@@ -286,7 +286,7 @@ class DhwaniSTTProvider:
             self._started_at_ns = started_at_ns
             self._audio_buffer = bytearray()
             self._last_send_time = time.time()
-            log.info("Dhwani STT begin utterance: %s", utterance_id)
+            log.info("Speech-to-Text STT begin utterance: %s", utterance_id)
 
     def push_audio(self, pcm16: bytes, timestamp_ns: int) -> None:
         with self._lock:
@@ -294,7 +294,7 @@ class DhwaniSTTProvider:
                 return
             self._audio_buffer.extend(pcm16)
 
-            provider_type = getattr(self._config, "dhwani_provider", "openai").lower()
+            provider_type = getattr(self._config, "speech_to_text_provider", "openai").lower()
             if provider_type == "deepgram":
                 interval = 0.04
             elif provider_type == "openai":
@@ -335,7 +335,7 @@ class DhwaniSTTProvider:
         if not self._audio_buffer:
             return
 
-        provider_type = getattr(self._config, "dhwani_provider", "openai").lower()
+        provider_type = getattr(self._config, "speech_to_text_provider", "openai").lower()
         if provider_type == "deepgram":
             # Stream raw PCM16 bytes directly for low-latency continuous stream
             chunk_bytes = bytes(self._audio_buffer)
@@ -381,8 +381,8 @@ class DhwaniSTTProvider:
         from audio_processing.audio_processing_backend.providers import get_stt_provider
         from audio_processing.audio_processing_backend.services import llm_cleaning
 
-        provider = getattr(self._config, "dhwani_provider", "openai")
-        openai_key = getattr(self._config, "dhwani_openai_key", "")
+        provider = getattr(self._config, "speech_to_text_provider", "openai")
+        openai_key = getattr(self._config, "speech_to_text_openai_key", "")
         # fallback to standard OpenAI key if configured
         if not openai_key:
             try:
@@ -391,9 +391,9 @@ class DhwaniSTTProvider:
             except Exception:
                 pass
 
-        deepgram_key = getattr(self._config, "dhwani_deepgram_key", "")
+        deepgram_key = getattr(self._config, "speech_to_text_deepgram_key", "")
 
-        log.info("Initializing Dhwani STT provider in-process (provider=%s)", provider)
+        log.info("Initializing Speech-to-Text STT provider in-process (provider=%s)", provider)
         stt_provider_instance = get_stt_provider(
             provider,
             openai_key=openai_key,
@@ -404,20 +404,20 @@ class DhwaniSTTProvider:
             if not raw_text:
                 return
 
-            print(f"[dhwani] handler_callback raw text received (is_final={is_final}): '{raw_text}'")
+            print(f"[speech-to-text] handler_callback raw text received (is_final={is_final}): '{raw_text}'")
 
             # Emit raw text as partial transcript immediately
             if not is_final:
                 if self._callback:
-                    print(f"[dhwani] Emitting partial transcript: '{raw_text}'")
+                    print(f"[speech-to-text] Emitting partial transcript: '{raw_text}'")
                     partial_latency = ((monotonic_ns() - self._started_at_ns) / 1_000_000) if self._started_at_ns > 0 else 0.0
                     self._callback(
                         Transcript(
                             text=raw_text,
                             is_final=False,
-                            utterance_id=self._utterance_id or "dhwani-utterance",
+                            utterance_id=self._utterance_id or "speech-to-text-utterance",
                             started_at_ns=self._started_at_ns,
-                            provider="dhwani",
+                            provider="speech_to_text",
                             latency_ms=partial_latency
                         )
                     )
@@ -431,13 +431,13 @@ class DhwaniSTTProvider:
             import openai_service
             if not getattr(self._config, "disable_llm_cleaning", True) and not getattr(openai_service, "_use_local_fallback_directly", False):
                 try:
-                    print(f"[dhwani] Running LLM cleaning for raw text...", flush=True)
+                    print(f"[speech-to-text] Running LLM cleaning for raw text...", flush=True)
                     cleaned_val = await llm_cleaning(self._raw_transcript_history, raw_text)
-                    print(f"[dhwani] Cleaned result: '{cleaned_val}'", flush=True)
+                    print(f"[speech-to-text] Cleaned result: '{cleaned_val}'", flush=True)
                     if cleaned_val == "[SILENCE]":
                         cleaned_val = raw_text
                 except Exception as e:
-                    print(f"[dhwani] Error during in-process LLM cleaning: {e}", flush=True)
+                    print(f"[speech-to-text] Error during in-process LLM cleaning: {e}", flush=True)
                     cleaned_val = raw_text
             else:
                 # Bypassing LLM cleaning or in local fallback mode
@@ -450,16 +450,16 @@ class DhwaniSTTProvider:
                 cleaned_val = cleaned_val.replace(" ,", ",")
 
             if self._callback:
-                print(f"[dhwani] Emitting final transcript: '{cleaned_val}'", flush=True)
+                print(f"[speech-to-text] Emitting final transcript: '{cleaned_val}'", flush=True)
                 final_latency = ((monotonic_ns() - self._started_at_ns) / 1_000_000) if self._started_at_ns > 0 else 0.0
                 self._callback(
                     Transcript(
                         text=cleaned_val,
                         is_final=True,
-                        utterance_id=self._utterance_id or "dhwani-utterance",
+                        utterance_id=self._utterance_id or "speech-to-text-utterance",
                         started_at_ns=self._started_at_ns,
                         ended_at_ns=monotonic_ns(),
-                        provider="dhwani",
+                        provider="speech_to_text",
                         latency_ms=final_latency
                     )
                 )
@@ -467,19 +467,19 @@ class DhwaniSTTProvider:
         try:
             await stt_provider_instance.process_audio_stream(self._audio_queue, handler_callback)
         except Exception as e:
-            log.error("Dhwani STT in-process provider error: %s", e)
+            log.error("Speech-to-Text STT in-process provider error: %s", e)
 
 
 
 def create_stt_provider(config: AudioSTTConfig) -> StreamingSTTProvider:
     provider = config.stt_provider.lower()
-    if provider == "dhwani":
+    if provider in ("dhwani", "speech_to_text"):
         try:
             import websockets  # noqa: F401
-            return DhwaniSTTProvider(config)
+            return SpeechToTextSTTProvider(config)
         except ImportError:
             raise RuntimeError(
-                "Dhwani STT provider requires the 'websockets' package. "
+                "Speech-to-Text STT provider requires the 'websockets' package. "
                 "Install it in the virtual environment or run pip install websockets."
             )
     if provider == "sensevoice":

@@ -206,7 +206,7 @@ class AudioToTextPipeline:
         pre_speech_samples = round(
             self.config.pre_speech_ms * self.config.sample_rate / 1000
         )
-        is_dhwani = getattr(self._stt, "name", "").lower() == "dhwani"
+        is_speech_to_text = getattr(self._stt, "name", "").lower() in ("speech_to_text", "dhwani")
 
         while not self._stop.is_set():
             try:
@@ -228,10 +228,10 @@ class AudioToTextPipeline:
                         )
                     )
 
-                if is_dhwani:
+                if is_speech_to_text:
                     if not active:
                         active = True
-                        utterance_id = "continuous-dhwani"
+                        utterance_id = "continuous-speech-to-text"
                         self._stt.begin_utterance(utterance_id, timestamp_ns)
                     self._stt.push_audio(float_to_pcm16(enhanced), timestamp_ns)
                     continue

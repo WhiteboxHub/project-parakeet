@@ -1,5 +1,5 @@
 """
-Interview Copilot — Windows + macOS.
+WboxAI — Windows + macOS.
 Isolated project: uses only interview-copilot/.env and interview-copilot/venv.
 """
 
@@ -8,17 +8,92 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# Initialize application entry
+
+# Associate taskbar icon on Windows
+if sys.platform == "win32":
+    import ctypes
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("whitebox.wboxai.v1")
+    except Exception:
+        pass
+
 # Inject reorganized codebase package directories into Python sys.path
 _ROOT = Path(__file__).resolve().parent
-for _p in (_ROOT, _ROOT / "copilot_app", _ROOT / "audio_processing", _ROOT / "llm_project"):
+for _p in (_ROOT, _ROOT / "wboxai_app", _ROOT / "audio_processing", _ROOT / "llm_project"):
     _p_str = str(_p.resolve())
     if _p_str not in sys.path:
         sys.path.insert(0, _p_str)
 
-# Bootstrap before config (venv + .env checks)
-from project_bootstrap import bootstrap
+# Check command line arguments for configuration request
+if "--config" in sys.argv or "-c" in sys.argv:
+    try:
+        from PyQt6.QtWidgets import QApplication
+        from installer import SetupWizard
+        app = QApplication.instance() or QApplication(sys.argv)
+        wizard = SetupWizard(config_only=True)
+        wizard.show()
+        sys.exit(app.exec())
+    except Exception as e:
+        print(f"Error launching configuration editor: {e}", file=sys.stderr)
+        sys.exit(1)
 
-bootstrap()
+# Bootstrap before config (venv + .env checks)
+try:
+    from project_bootstrap import bootstrap
+    bootstrap()
+except Exception as e:
+    import sys
+    from pathlib import Path
+    
+    # Check if this is a missing .env file
+    is_missing_env = isinstance(e, FileNotFoundError) or "Missing configuration file" in str(e)
+    
+    try:
+        from PyQt6.QtWidgets import QApplication, QMessageBox
+    except ImportError:
+        print(f"Bootstrap error: {e}", file=sys.stderr)
+        sys.exit(1)
+        
+    app = QApplication.instance() or QApplication(sys.argv)
+    
+    if is_missing_env:
+        try:
+            from installer import SetupWizard
+            wizard = SetupWizard(first_time_setup=True)
+            wizard.show()
+            app.exec()
+            
+            if getattr(wizard, "setup_successful", False):
+                try:
+                    from project_bootstrap import bootstrap
+                    bootstrap()
+                except Exception as boot_err:
+                    print(f"Error bootstrapping after setup: {boot_err}", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                sys.exit(1)
+        except Exception as wizard_err:
+            import traceback
+            err_msg = traceback.format_exc()
+            box = QMessageBox()
+            box.setIcon(QMessageBox.Icon.Critical)
+            box.setWindowTitle("Setup Wizard Error")
+            box.setText("Failed to start the configuration setup wizard.")
+            box.setInformativeText(f"{str(wizard_err)}\n\n{err_msg}")
+            box.exec()
+            sys.exit(1)
+    else:
+        import traceback
+        err_msg = traceback.format_exc()
+        box = QMessageBox()
+        box.setIcon(QMessageBox.Icon.Critical)
+        box.setWindowTitle("Startup Error")
+        box.setText("Failed to start WboxAI.")
+        box.setInformativeText(f"{str(e)}\n\n{err_msg}")
+        box.exec()
+        sys.exit(1)
+
 
 import sys
 import threading
@@ -62,7 +137,7 @@ class WorkerBridge(QObject):
 class InterviewApp:
     def __init__(self):
         self.app = QApplication(sys.argv)
-        self.app.setApplicationName("Interview Copilot")
+        self.app.setApplicationName("WboxAI")
         self.window = OverlayWindow()
         self.bridge = WorkerBridge()
         self.executor = ThreadPoolExecutor(max_workers=max(4, config.MAX_WORKERS))
@@ -149,8 +224,7 @@ class InterviewApp:
         self._busy = True
         self._pending_scan_detail = "high"
         self.window.status_changed.emit("Capturing screen...")
-        self.window.hide_for_screenshot()
-        QTimer.singleShot(120, self._scan_step_capture)
+        self._scan_step_capture()
 
     def _scan_step_capture(self) -> None:
         self.executor.submit(self._worker_capture_jpeg, self._pending_scan_detail)
@@ -167,7 +241,6 @@ class InterviewApp:
             traceback.print_exc()
 
     def _on_scan_jpeg_ready(self, jpeg: bytes, detail: str) -> None:
-        self.window.restore_after_screenshot()
         if not jpeg:
             return
         self.window.status_changed.emit("Reading problem (AI vision)...")
@@ -208,22 +281,18 @@ class InterviewApp:
             )
         else:
             self._watch_timer.stop()
-            if self._watch_capture_pending:
-                self._watch_capture_pending = False
-                self.window.restore_after_screenshot()
+            self._watch_capture_pending = False
             self.window.status_changed.emit("Watch off")
 
     def _watch_tick_start(self) -> None:
         if self._busy or self._watch_capture_pending or not self._watcher.enabled:
             return
         self._watch_capture_pending = True
-        self.window.hide_for_screenshot()
-        QTimer.singleShot(120, self._watch_step_capture)
+        self._watch_step_capture()
 
     def _watch_step_capture(self) -> None:
         if not self._watcher.enabled:
             self._watch_capture_pending = False
-            self.window.restore_after_screenshot()
             return
         self.executor.submit(self._worker_watch_capture)
 
@@ -237,7 +306,6 @@ class InterviewApp:
 
     def _on_watch_jpeg_ready(self, jpeg: bytes, changed: bool) -> None:
         self._watch_capture_pending = False
-        self.window.restore_after_screenshot()
         if changed and jpeg and not self._busy:
             self._busy = True
             self.window.status_changed.emit("Screen changed — analyzing...")
@@ -302,10 +370,10 @@ class InterviewApp:
                 vad_model_path=config.AUDIO_VAD_MODEL_PATH,
                 allow_component_fallback=config.AUDIO_ALLOW_FALLBACK,
                 allow_openai_stt=config.AUDIO_ALLOW_OPENAI_STT,
-                dhwani_server_url=config.DHWANI_SERVER_URL,
-                dhwani_provider=config.DHWANI_PROVIDER,
-                dhwani_openai_key=config.DHWANI_OPENAI_KEY or config.OPENAI_API_KEY,
-                dhwani_deepgram_key=config.DHWANI_DEEPGRAM_KEY,
+                speech_to_text_server_url=config.SPEECH_TO_TEXT_SERVER_URL,
+                speech_to_text_provider=config.SPEECH_TO_TEXT_PROVIDER,
+                speech_to_text_openai_key=config.SPEECH_TO_TEXT_OPENAI_KEY or config.OPENAI_API_KEY,
+                speech_to_text_deepgram_key=config.SPEECH_TO_TEXT_DEEPGRAM_KEY,
                 disable_llm_cleaning=config.DISABLE_LLM_CLEANING,
             )
 
@@ -377,10 +445,10 @@ class InterviewApp:
                 vad_model_path=config.AUDIO_VAD_MODEL_PATH,
                 allow_component_fallback=config.AUDIO_ALLOW_FALLBACK,
                 allow_openai_stt=config.AUDIO_ALLOW_OPENAI_STT,
-                dhwani_server_url=config.DHWANI_SERVER_URL,
-                dhwani_provider=config.DHWANI_PROVIDER,
-                dhwani_openai_key=config.DHWANI_OPENAI_KEY or config.OPENAI_API_KEY,
-                dhwani_deepgram_key=config.DHWANI_DEEPGRAM_KEY,
+                speech_to_text_server_url=config.SPEECH_TO_TEXT_SERVER_URL,
+                speech_to_text_provider=config.SPEECH_TO_TEXT_PROVIDER,
+                speech_to_text_openai_key=config.SPEECH_TO_TEXT_OPENAI_KEY or config.OPENAI_API_KEY,
+                speech_to_text_deepgram_key=config.SPEECH_TO_TEXT_DEEPGRAM_KEY,
                 disable_llm_cleaning=config.DISABLE_LLM_CLEANING,
             )
 
@@ -599,17 +667,25 @@ class InterviewApp:
             return
         self._shutting_down = True
 
+        candidate_name = getattr(config, "SELECTED_CANDIDATE_NAME", "UnknownCandidate")
+        timestamp = getattr(config, "SESSION_TIMESTAMP", time.strftime("%Y%m%d_%H%M%S"))
+
         # Write token report before sending email
         try:
             from token_tracker import tracker_instance
-            tracker_instance.write_report()
+            tracker_instance.write_report(candidate_name, timestamp)
         except Exception as e:
             print(f"Error writing token report: {e}")
 
         if config.EMAIL_RECEIVER:
             try:
                 from email_service import send_transcript_email
-                t = threading.Thread(target=send_transcript_email, name="email-transcript-thread", daemon=False)
+                t = threading.Thread(
+                    target=send_transcript_email,
+                    args=(candidate_name, timestamp),
+                    name="email-transcript-thread",
+                    daemon=False
+                )
                 t.start()
             except Exception as e:
                 print(f"Error launching email thread: {e}")
@@ -696,8 +772,6 @@ class InterviewApp:
                 nonlocal ttft_ms
                 if is_cancelled():
                     return
-                if "NO_QUESTION" in parsed_resp.full_text.upper():
-                    return
                 if ttft_ms is None:
                     ttft_ms = (time.perf_counter() - start_time) * 1000
                 self.bridge.answer.emit({"provider": provider, "response": parsed_resp})
@@ -717,23 +791,12 @@ class InterviewApp:
                      return
 
                 if responses:
-                    # Filter out providers that returned NO_QUESTION
-                    valid_responses = {
-                        k: v for k, v in responses.items()
-                        if "NO_QUESTION" not in v.full_text.upper()
-                    }
-
-                    if not valid_responses:
-                        print(f"[main] Discarded non-question response matching 'NO_QUESTION' for text: '{text}'", flush=True)
-                        self.bridge.status.emit("Ready — listening...")
-                        return
-
-                    # Emit final response for all valid providers to ensure UI consistency
-                    for provider, resp in valid_responses.items():
+                    # Emit final response for all providers to ensure UI consistency
+                    for provider, resp in responses.items():
                         self.bridge.answer.emit({"provider": provider, "response": resp})
 
-                    primary = "openai" if "openai" in valid_responses else list(valid_responses.keys())[0]
-                    primary_response = valid_responses[primary]
+                    primary = "openai" if "openai" in responses else list(responses.keys())[0]
+                    primary_response = responses[primary]
 
                     if is_final:
                         self.conversation.append({"role": "user", "content": text})
@@ -755,6 +818,12 @@ class InterviewApp:
     def run(self) -> int:
         from overlay import show_resume_dialog
         show_resume_dialog()
+
+        # Update dynamic filepaths for latency tracker using chosen candidate
+        candidate_name = getattr(config, "SELECTED_CANDIDATE_NAME", "UnknownCandidate")
+        timestamp = getattr(config, "SESSION_TIMESTAMP", time.strftime("%Y%m%d_%H%M%S"))
+        from latency_tracker import tracker
+        tracker.set_dynamic_filepaths(candidate_name, timestamp)
 
         plat = "macOS" if config.IS_MAC else "Windows"
         self.window.show()
