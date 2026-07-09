@@ -435,15 +435,16 @@ VISION_SCREEN_PROMPT = """###############################
 ## SYSTEM IDENTITY
 ###############################
 
-You are reading a screenshot from a LIVE CODING interview.
+You are a visual accessibility assistant helping a software developer with visual impairments navigate and interpret their workspace.
 
 ###############################
 ## VISION RULES
 ###############################
 
-1) Read ALL problem text from the left panel AND the function signature from the editor.
-2) If you see ANY problem statement OR a function stub to implement → this IS a coding problem.
-3) Only output NO_PROBLEM if the screen is clearly NOT coding.
+1) Transcribe the question, options, or editor code visible in the screenshot.
+2) To assist the developer in choosing the correct navigation option, identify which statement(s) or choice(s) are correct and explain why.
+3) Frame all advice in a professional, direct, and helpful tone.
+4) If there are any human faces, webcam video feeds, profile pictures, or avatars visible in the screenshot, IGNORE them completely. Do NOT describe or attempt to identify any person. You are strictly analyzing the technical text, diagrams, code, and questions in the main interface.
 
 ###############################
 ## OUTPUT FORMAT RULES
@@ -451,27 +452,65 @@ You are reading a screenshot from a LIVE CODING interview.
 ###############################
 
 ===PROBLEM===
-Copy the full problem statement, examples, constraints, and function signature.
+Copy the full problem statement, questions, or choices shown on screen verbatim.
 
 ===APPROACH===
-- Problem Understanding and Approach (from brute force to optimal).
-- Dry Run explanation and things to mention.
-- Discussion points and trade-offs.
+- If coding: Step-by-step logic, code structure, and explanation.
+- If non-coding/MCQ: Identify the correct statement/option verbatim with a brief explanation.
 
 ===COMPLEXITY===
-Time: O(...)
-Space: O(...)
+- If coding: Time: O(...) and Space: O(...)
+- If non-coding: N/A
 
 ===CODE===
 ```{lang}
-# Complete working solution in {lang} matching the exact signature in the editor.
+# Complete working solution in {lang} if it is a coding problem.
+# If non-coding, leave this block empty or N/A.
 ```
 
 ===EDGE_CASES===
-- List of edge cases and verification tests.
+- If coding: List of edge cases.
+- If non-coding: N/A
 
 Language for implementation: {lang}
-Match the exact function name and parameters shown in the editor.
+"""
+
+VISION_ASSESSMENT_PROMPT = """###############################
+## SYSTEM IDENTITY
+###############################
+
+You are a visual accessibility assistant helping a developer with visual impairments read and navigate their technical interface.
+
+###############################
+## VISION RULES
+###############################
+
+1) Transcribe the question and all multiple-choice options or choices visible in the screenshot.
+2) Identify which option(s) are correct to assist the developer in navigating their screen.
+3) Output ONLY the correct choice(s) verbatim. Be extremely direct and concise.
+4) If there are any human faces, webcam video feeds, profile pictures, or avatars visible in the screenshot, IGNORE them completely. Do NOT describe or attempt to identify any person. You are strictly analyzing the technical text, diagrams, code, and questions in the main interface.
+
+###############################
+## OUTPUT FORMAT RULES
+## (YOU MUST USE EXACTLY THESE HEADERS TO RENDER CORRECTLY)
+###############################
+
+===PROBLEM===
+Copy the question statement and all options from the screen.
+
+===APPROACH===
+State ONLY the correct option(s) verbatim. Keep it extremely short.
+Example:
+Correct Option: Python is a high-level programming language.
+
+===COMPLEXITY===
+N/A
+
+===CODE===
+N/A
+
+===EDGE_CASES===
+N/A
 """
 
 
@@ -564,6 +603,8 @@ def should_use_coding_mode(question: str, force_coding: bool = False) -> bool:
         return True
     if config.CODING_MODE == "always":
         return True
+    if config.CODING_MODE == "auto":
+        return is_coding_question(question)
     return False
 
 
@@ -671,6 +712,7 @@ def generate_answer(
     force_coding: bool = False,
     on_chunk: Callable[[ParsedResponse], None] = None,
     is_cancelled: Callable[[], bool] = None,
+    is_screen_scan: bool = False,
 ) -> ParsedResponse:
     coding = should_use_coding_mode(question, force_coding)
     client = _client()
@@ -703,17 +745,38 @@ def generate_answer(
         max_tokens = config.CODING_MAX_TOKENS
         temperature = 0.2
     else:
-        system = SYSTEM_PROMPT.format(
-            resume=resume,
-            intro=intro,
-            project_overview=project_overview,
-            pdf_docs=pdf_docs,
-            role=config.JOB_ROLE,
-            job_desc=job_desc,
-        )
-        user_msg = f"Interviewer asked:\n{question}"
-        max_tokens = 250
-        temperature = 0.4
+        if is_screen_scan:
+            system = (
+                "You are solving a multiple-choice technical assessment question or conceptual question from a screenshot OCR.\n"
+                "Analyze the question and the options. State ONLY the correct option(s) or statement(s) verbatim, and a 1-sentence reasoning (if needed).\n"
+                "Keep it extremely direct and short so the candidate can read the correct answer instantly.\n"
+                "Output with these exact headers to match the display layout:\n"
+                "===PROBLEM===\n"
+                "Copy the question statement and all options from the screen.\n\n"
+                "===APPROACH===\n"
+                "State ONLY the correct option(s) verbatim.\n\n"
+                "===COMPLEXITY===\n"
+                "N/A\n\n"
+                "===CODE===\n"
+                "N/A\n\n"
+                "===EDGE_CASES===\n"
+                "N/A"
+            )
+            user_msg = f"Solve this assessment question and output only the correct choice/answer:\n{question}"
+            max_tokens = 150
+            temperature = 0.1
+        else:
+            system = SYSTEM_PROMPT.format(
+                resume=resume,
+                intro=intro,
+                project_overview=project_overview,
+                pdf_docs=pdf_docs,
+                role=config.JOB_ROLE,
+                job_desc=job_desc,
+            )
+            user_msg = f"Interviewer asked:\n{question}"
+            max_tokens = 250
+            temperature = 0.4
 
     messages = [{"role": "system", "content": system}]
 
@@ -966,16 +1029,24 @@ def generate_answer(
 def solve_from_screenshot(
     image_jpeg: bytes,
     detail: str = "high",
+    conversation: list[dict] = None,
+    last_question: str = "",
+    force_coding: bool = False,
+    on_chunk: Callable[[ParsedResponse], None] = None,
+    is_cancelled: Callable[[], bool] = None,
 ) -> Tuple[str, ParsedResponse]:
-    """Read problem from screen image and return coding solution."""
-    client = _client()
+    """Read problem from screen image using OpenAI Vision (primary) or local OCR (fallback)."""
+    from wboxai_app.win_ocr import run_win_ocr
+
     lang = config.CODE_LANGUAGE
     resume = config.load_resume_context() or ""
     intro = config.load_intro_context() or ""
     job_desc = config.JOB_DESCRIPTION.strip()
 
     b64 = base64.standard_b64encode(image_jpeg).decode("ascii")
-    instructions = VISION_SCREEN_PROMPT.format(lang=lang)
+    prompt_template = VISION_SCREEN_PROMPT if force_coding else VISION_ASSESSMENT_PROMPT
+    instructions = prompt_template.format(lang=lang)
+
     extra = ""
     if resume:
         extra += f"\nCandidate background:\n{resume[:2000]}"
@@ -984,11 +1055,24 @@ def solve_from_screenshot(
     if job_desc:
         extra += f"\nJob focus:\n{job_desc[:800]}"
 
-    global _use_local_fallback_directly
-    try:
-        if _use_local_fallback_directly:
-            raise Exception("insufficient_quota (cached)")
+    if conversation:
+        extra += "\n\n### RECENT DIALOGUE & AUDIO CONTEXT:\n"
+        for turn in conversation[-6:]:
+            role = "Candidate" if turn["role"] == "assistant" else "Interviewer/Audio"
+            extra += f"- {role}: {turn['content']}\n"
 
+    if last_question and last_question.strip():
+        last_turn_content = conversation[-1]["content"] if conversation else ""
+        if last_question.strip() not in last_turn_content:
+            extra += f"\n### CURRENT INTERVIEWER QUESTION / TRANSCRIPT:\n{last_question.strip()}\n"
+
+    raw_text = ""
+    success = False
+
+    # Try primary: OpenAI Vision completion with streaming
+    try:
+        print("[openai_service] Calling OpenAI Vision model...", flush=True)
+        client = _client()
         response = client.chat.completions.create(
             model=config.OPENAI_VISION_MODEL,
             messages=[
@@ -1008,125 +1092,86 @@ def solve_from_screenshot(
             ],
             temperature=0.2,
             max_tokens=2500,
+            stream=True,
         )
-        raw = (response.choices[0].message.content or "").strip()
-        has_vision = True
+
+        for chunk in response:
+            if is_cancelled and is_cancelled():
+                break
+            delta = chunk.choices[0].delta.content or ""
+            raw_text += delta
+
+            # Parse temporary output and stream chunk to GUI
+            if on_chunk:
+                temp_prob, temp_parsed = parse_vision_response(raw_text)
+                temp_parsed.is_coding = force_coding
+                on_chunk(temp_parsed)
+
+        success = True
+        print("[openai_service] Vision model call completed successfully.", flush=True)
     except Exception as exc:
-        err_str = str(exc).lower()
-        if "quota" in err_str or "limit" in err_str or "429" in err_str or "insufficient" in err_str:
-            if getattr(config, "USE_LOCAL_LLM", False):
-                _use_local_fallback_directly = True
-                print(f"[openai_service] OpenAI quota limit hit during vision scan. Checking local models...", flush=True)
-            try:
-                fallback_model = "qwen3:8b"
-                has_vision = False
-                try:
-                    r = httpx.get("http://127.0.0.1:11434/api/tags", timeout=2.0)
-                    if r.status_code == 200:
-                        models = [m["name"] for m in r.json().get("models", [])]
-                        vision_keywords = ["llava", "bakllava", "minicpm", "vision", "moondream"]
-                        for model in models:
-                            if any(k in model.lower() for k in vision_keywords):
-                                fallback_model = model
-                                has_vision = True
-                                break
-                        if not has_vision:
-                            qwen_models = [m for m in models if "qwen" in m]
-                            if qwen_models:
-                                preferred = ["qwen3:8b", "qwen3:14b", "qwen3:30b", "qwen3", "qwen2.5:7b", "qwen2.5:14b", "qwen2.5:3b", "qwen2.5"]
-                                for pref in preferred:
-                                    if pref in qwen_models:
-                                        fallback_model = pref
-                                        break
-                except Exception:
-                    pass
+        print(f"[openai_service] Vision model call failed (switching to local OCR fallback): {exc}", flush=True)
 
-                print(f"[openai_service] Falling back to local model: '{fallback_model}' (has_vision={has_vision})", flush=True)
-                local_client = OpenAI(
-                    base_url="http://127.0.0.1:11434/v1",
-                    api_key="ollama",
-                )
-                
-                if has_vision:
-                    response = local_client.chat.completions.create(
-                        model=fallback_model,
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": [
-                                    {"type": "text", "text": instructions + extra},
-                                    {
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": f"data:image/jpeg;base64,{b64}"
-                                        }
-                                    }
-                                ]
-                            }
-                        ],
-                        temperature=0.2,
-                        max_tokens=2500
-                    )
-                    raw = (response.choices[0].message.content or "").strip()
-                else:
-                    prompt = (
-                        "OpenAI Quota Limit Exceeded. A local text-only model is running, "
-                        "but screen vision scanning is not available without a local vision model (e.g. llava). "
-                        "Generate a template response instructing the candidate to paste the problem description or read it out loud."
-                    )
-                    response = local_client.chat.completions.create(
-                        model=fallback_model,
-                        messages=[
-                            {"role": "system", "content": "You are a coding interview copilot."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=0.2,
-                        max_tokens=1000
-                    )
-                    raw = (response.choices[0].message.content or "").strip()
-            except Exception as local_exc:
-                print(f"[openai_service] Local vision fallback failed: {local_exc}", flush=True)
-                raise exc
+    if not success or (is_cancelled and is_cancelled()):
+        # Check cancellation
+        if is_cancelled and is_cancelled():
+            return "", ParsedResponse(
+                is_coding=force_coding,
+                approach="Cancelled.",
+                code="",
+                complexity="",
+                edge_cases="",
+                full_text="",
+                problem_text=""
+            )
+
+        # 2. Fallback: Run local OCR + text chat
+        print("[openai_service] Fallback: Running local Windows OCR...", flush=True)
+        ocr_text = run_win_ocr(image_jpeg)
+        if not ocr_text or len(ocr_text.strip()) < 5:
+            ocr_text = "No text detected on screen via local Windows OCR."
+            if last_question and last_question.strip():
+                ocr_text += f"\nLast question / context: {last_question.strip()}"
+
+        print(f"[openai_service] Fallback OCR Extracted Text:\n{ocr_text}\n", flush=True)
+
+        is_coding = should_use_coding_mode(ocr_text, force_coding)
+        def fallback_on_chunk(provider, parsed_resp):
+            if on_chunk:
+                on_chunk(parsed_resp)
+
+        responses = generate_answer(
+            question=ocr_text,
+            conversation=conversation or [],
+            force_coding=is_coding,
+            on_chunk=fallback_on_chunk,
+            is_cancelled=is_cancelled,
+            is_screen_scan=True,
+        )
+
+        if responses:
+            primary = "openai" if "openai" in responses else list(responses.keys())[0]
+            parsed = responses[primary]
+            problem = ocr_text
         else:
-            raise exc
+            parsed = ParsedResponse(
+                is_coding=is_coding,
+                approach="Error: No answer received from active providers.",
+                code="",
+                complexity="",
+                edge_cases="",
+                full_text="Error: No answer received from active providers.",
+                problem_text=ocr_text,
+            )
+            problem = ocr_text
 
-    problem, parsed = parse_vision_response(raw)
-    parsed.is_coding = True
-
-    if not has_vision:
-        problem = "OpenAI Quota Exceeded — Local Qwen Active"
-        parsed.approach = "Please read the problem description out loud or paste the problem description so that the local Qwen model can solve it."
-        parsed.code = "# Screen vision scanning is offline due to OpenAI quota limit.\n# Please speak/transcribe the problem description."
+        parsed.problem_text = ocr_text
+        parsed.is_coding = is_coding
         return problem, parsed
 
-    prob_upper = (problem or "").strip().upper()
-    looks_coding = _screen_looks_like_coding(problem, raw)
-
-    if prob_upper == "NO_PROBLEM" and not looks_coding:
-        raise ValueError(
-            "No coding problem on screen. Open your coding tab (White-box / LeetCode) "
-            "and press Scan screen (Ctrl+Shift+S)."
-        )
-
-    prob_text = problem if prob_upper != "NO_PROBLEM" else parsed.problem_text
-    if not prob_text:
-        prob_text = _extract_problem_fallback(raw)
-
-    # Vision sometimes returns problem only — generate solution via chat model
-    if (not parsed.code or len(parsed.approach.strip()) < 30) and prob_text:
-        parsed = generate_answer(prob_text, [], force_coding=True)
-        parsed.is_coding = True
-        parsed.problem_text = prob_text
-        problem = prob_text
-
-    if not parsed.code and not parsed.approach.strip():
-        raise ValueError(
-            "Could not read the coding problem. Zoom the problem panel and scan again."
-        )
-
-    if not problem and prob_text:
-        problem = prob_text
-
+    # Return the parsed final result of vision model
+    problem, parsed = parse_vision_response(raw_text)
+    parsed.is_coding = force_coding
     return problem, parsed
 
 

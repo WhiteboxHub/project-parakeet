@@ -75,9 +75,9 @@ def parse_structured_response(raw: str, is_coding: bool) -> ParsedResponse:
     display_parts = []
     if approach:
         display_parts.append(approach)
-    if complexity:
+    if complexity and complexity.strip().upper() != "N/A":
         display_parts.append(f"Complexity:\n{complexity}")
-    if edge:
+    if edge and edge.strip().upper() != "N/A":
         display_parts.append(f"Edge cases:\n{edge}")
 
     full = raw

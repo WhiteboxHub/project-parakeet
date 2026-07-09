@@ -197,25 +197,29 @@ class InterviewApp:
             self.window.status_changed.emit("Already generating — please wait...")
             return
         q = self.window.get_last_question().strip()
+        checked = self.window.btn_coding.isChecked()
         if q:
-            self.window.status_changed.emit("Regenerating coding solution...")
+            if checked:
+                self.window.status_changed.emit("Regenerating coding solution...")
+            else:
+                self.window.status_changed.emit("Regenerating standard solution...")
             self.window.set_coding_busy(True)
             self._busy = True
-            # A forced retry only needs the current problem. Sending previous
-            # code answers again adds a large prompt and noticeably increases
-            # latency without improving the result.
+            
             self._generation_request_id += 1
             self.executor.submit(
                 self._generate_for_question,
                 q,
-                True,
+                checked,
                 self._generation_request_id,
                 True,
                 False,
             )
         else:
-            self._force_next_coding = True
-            self.window.status_changed.emit("Coding mode armed for next question")
+            if checked:
+                self.window.status_changed.emit("Coding mode armed for next question")
+            else:
+                self.window.status_changed.emit("Standard mode armed for next question")
 
     def _on_scan_screen(self) -> None:
         if self._busy or self._watch_capture_pending:
@@ -224,34 +228,102 @@ class InterviewApp:
         self._busy = True
         self._pending_scan_detail = "high"
         self.window.status_changed.emit("Capturing screen...")
-        self._scan_step_capture()
+        
+        screen = self.window.screen()
+        geom = screen.geometry() if screen else None
+        screen_index = -1
+        if screen:
+            try:
+                screen_index = QApplication.screens().index(screen)
+            except Exception:
+                pass
 
-    def _scan_step_capture(self) -> None:
-        self.executor.submit(self._worker_capture_jpeg, self._pending_scan_detail)
+        screen_info = {
+            "index": screen_index,
+            "x": geom.x(),
+            "y": geom.y(),
+            "width": geom.width(),
+            "height": geom.height(),
+        } if geom else None
+        
+        # Hide overlay window before screenshot to avoid capturing WboxAI overlay itself
+        self.window.hide()
+        QTimer.singleShot(150, lambda: self._scan_step_capture_and_restore(screen_info))
 
-    def _worker_capture_jpeg(self, detail: str) -> None:
+    def _scan_step_capture_and_restore(self, screen_info: dict | None) -> None:
         try:
+            # Capture synchronously to guarantee WboxAI is hidden before screenshot is taken
+            detail = self._pending_scan_detail
             max_w = 1920 if detail == "high" else None
             quality = 88 if detail == "high" else None
-            jpeg = capture_screen_jpeg(max_width=max_w, quality=quality)
+            jpeg = capture_screen_jpeg(max_width=max_w, quality=quality, screen_info=screen_info)
+            
+            # Restore the window immediately
+            self.window.show()
+            
+            # Emit jpeg ready to start solver thread
             self.bridge.jpeg_ready.emit(jpeg, detail)
         except Exception as e:
-            self.bridge.jpeg_ready.emit(b"", detail)
+            self.window.show()
+            self.bridge.jpeg_ready.emit(b"", self._pending_scan_detail)
             self.bridge.error.emit(format_api_error(e))
             traceback.print_exc()
 
     def _on_scan_jpeg_ready(self, jpeg: bytes, detail: str) -> None:
         if not jpeg:
+            self._busy = False
             return
         self.window.status_changed.emit("Reading problem (AI vision)...")
         self._generation_request_id += 1
-        self.executor.submit(self._worker_solve_jpeg, jpeg, detail)
+        last_question = self.window.get_last_question()
+        force_coding = self.window.btn_coding.isChecked()
+        self.executor.submit(
+            self._worker_solve_jpeg,
+            jpeg,
+            detail,
+            self._generation_request_id,
+            last_question,
+            force_coding,
+        )
 
-    def _worker_solve_jpeg(self, jpeg: bytes, detail: str) -> None:
+    def _worker_solve_jpeg(
+        self,
+        jpeg: bytes,
+        detail: str,
+        request_id: int,
+        last_question: str,
+        force_coding: bool,
+    ) -> None:
         with self._generation_lock:
+            if request_id < self._generation_request_id:
+                return
             self._busy = True
-            try:
-                problem, response = solve_from_screenshot(jpeg, detail=detail)
+            history = list(self.conversation)
+
+        def on_chunk(parsed: ParsedResponse) -> None:
+            with self._generation_lock:
+                if request_id < self._generation_request_id:
+                    return
+            self.bridge.answer.emit({"provider": "openai", "response": parsed})
+
+        def is_cancelled() -> bool:
+            with self._generation_lock:
+                return request_id < self._generation_request_id
+
+        try:
+            problem, response = solve_from_screenshot(
+                jpeg,
+                detail=detail,
+                conversation=history,
+                last_question=last_question,
+                force_coding=force_coding,
+                on_chunk=on_chunk,
+                is_cancelled=is_cancelled,
+            )
+
+            with self._generation_lock:
+                if request_id < self._generation_request_id:
+                    return
                 question = problem or response.problem_text or "(from screenshot)"
                 self.bridge.question.emit(question)
                 self.conversation.append(
@@ -260,16 +332,26 @@ class InterviewApp:
                 self.conversation.append(
                     {"role": "assistant", "content": response.full_text}
                 )
-                self.bridge.answer.emit(response)
+                active_providers = config.get_active_providers()
+                if active_providers:
+                    for provider in active_providers:
+                        self.bridge.answer.emit({"provider": provider, "response": response})
+                else:
+                    self.bridge.answer.emit({"provider": "openai", "response": response})
                 if response.is_coding and response.code:
                     self.bridge.status.emit("Coding solution ready — Ctrl+Shift+S to rescan")
                 else:
                     self.bridge.status.emit("Ready — Ctrl+Shift+S to rescan")
-            except Exception as e:
+        except Exception as e:
+            with self._generation_lock:
+                is_current = (request_id == self._generation_request_id)
+            if is_current:
                 self.bridge.error.emit(format_api_error(e))
-                traceback.print_exc()
-            finally:
-                self._busy = False
+            traceback.print_exc()
+        finally:
+            with self._generation_lock:
+                if request_id == self._generation_request_id:
+                    self._busy = False
 
     def _on_watch_toggle(self, enabled: bool) -> None:
         self._watcher.enabled = enabled
@@ -288,17 +370,35 @@ class InterviewApp:
         if self._busy or self._watch_capture_pending or not self._watcher.enabled:
             return
         self._watch_capture_pending = True
-        self._watch_step_capture()
+        
+        screen = self.window.screen()
+        geom = screen.geometry() if screen else None
+        screen_index = -1
+        if screen:
+            try:
+                screen_index = QApplication.screens().index(screen)
+            except Exception:
+                pass
 
-    def _watch_step_capture(self) -> None:
+        screen_info = {
+            "index": screen_index,
+            "x": geom.x(),
+            "y": geom.y(),
+            "width": geom.width(),
+            "height": geom.height(),
+        } if geom else None
+
+        self._watch_step_capture(screen_info)
+
+    def _watch_step_capture(self, screen_info: dict | None = None) -> None:
         if not self._watcher.enabled:
             self._watch_capture_pending = False
             return
-        self.executor.submit(self._worker_watch_capture)
+        self.executor.submit(self._worker_watch_capture, screen_info)
 
-    def _worker_watch_capture(self) -> None:
+    def _worker_watch_capture(self, screen_info: dict | None = None) -> None:
         try:
-            changed, jpeg = self._watcher.capture_and_check()
+            changed, jpeg = self._watcher.capture_and_check(screen_info)
             self.bridge.watch_jpeg_ready.emit(jpeg, changed)
         except Exception as e:
             self.bridge.watch_jpeg_ready.emit(b"", False)
@@ -309,7 +409,16 @@ class InterviewApp:
         if changed and jpeg and not self._busy:
             self._busy = True
             self.window.status_changed.emit("Screen changed — analyzing...")
-            self.executor.submit(self._worker_solve_jpeg, jpeg, "low")
+            self._generation_request_id += 1
+            last_question = self.window.get_last_question()
+            self.executor.submit(
+                self._worker_solve_jpeg,
+                jpeg,
+                "low",
+                self._generation_request_id,
+                last_question,
+                False,
+            )
 
     def _on_listen_toggle(self, listening: bool) -> None:
         if listening:

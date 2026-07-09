@@ -526,10 +526,9 @@ class OverlayWindow(QMainWindow):
         header.addWidget(title)
         header.addStretch()
 
-        self.btn_coding = QPushButton("Coding")
-        self.btn_coding.setObjectName("ghost")
-        self.btn_coding.setCheckable(True)
-        self.btn_coding.clicked.connect(self._on_force_coding_click)
+        self.btn_coding = QToggleSwitch(text="Coding")
+        self.btn_coding.setChecked(False)
+        self.btn_coding.toggled.connect(self._on_force_coding_click)
         header.addWidget(self.btn_coding)
 
         self.btn_scan = QPushButton("Scan screen")
@@ -744,11 +743,26 @@ class OverlayWindow(QMainWindow):
         if panel is None:
             return None
         local = panel.mapFromGlobal(global_pos)
-        w = panel.childAt(local)
-        while w is not None:
-            if isinstance(w, (QTextEdit, QPlainTextEdit)):
-                return w
-            w = w.parentWidget()
+        
+        # 1. Check if inside the question box area
+        if self.question_box.geometry().contains(local):
+            return self.question_box
+
+        # 2. Check if inside any provider column area
+        for provider, col in self.columns.items():
+            if col["widget"].geometry().contains(local):
+                col_local = col["widget"].mapFrom(panel, local)
+                if col["code_section"].isVisible() and col_local.y() > col["widget"].height() * 0.45:
+                    return col["code_box"]
+                return col["answer_box"]
+
+        # 3. Fallback: if hovering over the overlay window itself (margins, spacing, drag-strip)
+        if self.rect().contains(self.mapFromGlobal(global_pos)):
+            if self.columns:
+                primary = "openai" if "openai" in self.columns else list(self.columns.keys())[0]
+                return self.columns[primary]["answer_box"]
+            return self.question_box
+
         return None
 
     @staticmethod
@@ -806,8 +820,9 @@ class OverlayWindow(QMainWindow):
             target = self._scroll_target_at(event.globalPosition().toPoint())
             if target is not None:
                 self._apply_wheel_scroll(target, event.angleDelta().y())
-            event.accept()
-            return True
+                event.accept()
+                return True
+            return False
 
         return False
 
@@ -815,7 +830,7 @@ class OverlayWindow(QMainWindow):
         target = self._scroll_target_at(event.globalPosition().toPoint())
         if target is not None:
             self._apply_wheel_scroll(target, event.angleDelta().y())
-        event.accept()
+            event.accept()
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -979,13 +994,12 @@ class OverlayWindow(QMainWindow):
         self.listening_toggled.emit(self._listening)
         self.schedule_exclude()
 
-    def _on_force_coding_click(self) -> None:
+    def _on_force_coding_click(self, *args) -> None:
         self.force_coding_requested.emit()
         self.schedule_exclude()
 
     def set_coding_busy(self, busy: bool) -> None:
         self.btn_coding.setEnabled(not busy)
-        self.btn_coding.setText("Generating..." if busy else "Coding")
 
     def _on_scan_button_clicked(self) -> None:
         self.scan_screen_requested.emit()
@@ -1017,8 +1031,7 @@ class OverlayWindow(QMainWindow):
         self.schedule_exclude()
 
     def _shortcut_force_coding(self) -> None:
-        self.btn_coding.setChecked(True)
-        self._on_force_coding_click()
+        self.btn_coding.setChecked(not self.btn_coding.isChecked())
 
     def set_listening_state(self, listening: bool) -> None:
         self._listening = listening
@@ -1086,7 +1099,7 @@ class OverlayWindow(QMainWindow):
         else:
             col["code_section"].hide()
             col["header"].setText(f"{provider.capitalize()} Answer")
-            full_content = response.full_text
+            full_content = response.approach or response.full_text
             if response.code and not self.btn_coding.isChecked():
                 if "```" not in full_content:
                     full_content += f"\n\nCode:\n```{config.CODE_LANGUAGE}\n{response.code}\n```"

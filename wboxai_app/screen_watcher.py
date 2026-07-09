@@ -22,13 +22,14 @@ class ScreenWatcher:
     def reset(self) -> None:
         self._last_frame = None
 
+
     @staticmethod
     def _fingerprint(jpeg_bytes: bytes) -> np.ndarray:
         img = Image.open(io.BytesIO(jpeg_bytes))
         img = img.convert("L").resize((48, 27), Image.Resampling.NEAREST)
         return np.asarray(img, dtype=np.int16)
 
-    def capture_and_check(self) -> Tuple[bool, bytes]:
+    def capture_and_check(self, screen_info: dict | None = None) -> Tuple[bool, bytes]:
         """
         Capture screen and return (changed, jpeg).
         Run in worker thread — no Qt calls.
@@ -36,7 +37,7 @@ class ScreenWatcher:
         if not self.enabled:
             return False, b""
 
-        jpeg = capture_screen_jpeg(quality=65)
+        jpeg = capture_screen_jpeg(quality=65, screen_info=screen_info)
         frame = self._fingerprint(jpeg)
         if self._last_frame is None:
             self._last_frame = frame
