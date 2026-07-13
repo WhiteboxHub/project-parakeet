@@ -22,12 +22,13 @@ def _abgr_tint(percent: float) -> int:
     # Minimal blur: soften edge vs desktop, no milky overlay
     if percent < 2.0:
         return 0
-    alpha = max(0, min(32, int(255 * percent / 100)))
+    alpha = int(10 + (245 * (percent - 2.0) / 98.0))
+    alpha = max(10, min(255, alpha))
     return (alpha << 24) | 0x00FFFFFF
 
 
 def _apply_windows_blur(hwnd: int, blur_percent: float) -> bool:
-    if sys.platform != "win32" or not hwnd or blur_percent <= 0:
+    if sys.platform != "win32" or not hwnd:
         return False
     try:
         import ctypes
@@ -50,9 +51,13 @@ def _apply_windows_blur(hwnd: int, blur_percent: float) -> bool:
             ]
 
         accent = ACCENT_POLICY()
-        accent.AccentState = 3  # ACCENT_ENABLE_BLURBEHIND
+        if blur_percent <= 0:
+            accent.AccentState = 0  # ACCENT_DISABLED
+            accent.GradientColor = 0
+        else:
+            accent.AccentState = 3  # ACCENT_ENABLE_BLURBEHIND
+            accent.GradientColor = _abgr_tint(blur_percent)
         accent.AccentFlags = 0
-        accent.GradientColor = _abgr_tint(blur_percent)
 
         data = WINDOWCOMPOSITIONATTRIBDATA()
         data.Attribute = 19  # WCA_ACCENT_POLICY
@@ -103,11 +108,9 @@ def apply_glass_backdrop(widget: Any, blur_percent: float | None = None) -> bool
     import config
 
     pct = config.GLASS_BLUR_PERCENT if blur_percent is None else blur_percent
-    if pct <= 0:
-        return False
     hwnd = _native_hwnd(widget)
     if sys.platform == "win32":
         return _apply_windows_blur(hwnd, pct)
-    if sys.platform == "darwin":
+    if sys.platform == "darwin" and pct > 0:
         return _apply_macos_vibrancy(widget, pct)
     return False

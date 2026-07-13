@@ -136,7 +136,8 @@ class WorkerBridge(QObject):
 
 class InterviewApp:
     def __init__(self):
-        self.app = QApplication(sys.argv)
+        self.app = QApplication.instance() or QApplication(sys.argv)
+        self.app.setQuitOnLastWindowClosed(False)
         self.app.setApplicationName("WboxAI")
         self.window = OverlayWindow()
         self.bridge = WorkerBridge()
@@ -179,6 +180,7 @@ class InterviewApp:
         self.window.force_coding_requested.connect(self._on_force_coding)
         self.window.scan_screen_requested.connect(self._on_scan_screen)
         self.window.watch_screen_toggled.connect(self._on_watch_toggle)
+        self.window.refresh_requested.connect(self._on_refresh_requested)
         self.app.aboutToQuit.connect(self._shutdown)
 
         if config.SCREEN_WATCH_ENABLED:
@@ -192,6 +194,15 @@ class InterviewApp:
         self._busy = False
         self.window.status_changed.emit(f"Error: {msg}")
 
+    def _on_refresh_requested(self) -> None:
+        print("[main] Refresh requested. Aborting active generation...", flush=True)
+        self._generation_request_id += 1
+        self._busy = False
+        self.window.set_coding_busy(False)
+        self.bridge.coding_busy.emit(False)
+        self.window.clear_responses()
+        self.window.status_changed.emit("Ready — refreshed")
+
     def _on_force_coding(self) -> None:
         if self._busy:
             self.window.status_changed.emit("Already generating — please wait...")
@@ -199,23 +210,36 @@ class InterviewApp:
         q = self.window.get_last_question().strip()
         checked = self.window.btn_coding.isChecked()
         if q:
-            if checked:
-                self.window.status_changed.emit("Regenerating coding solution...")
-            else:
-                self.window.status_changed.emit("Regenerating standard solution...")
-            self.window.set_coding_busy(True)
-            self._busy = True
+            has_cached_code = False
+            if hasattr(self.window, "_last_responses") and self.window._last_responses:
+                for data in self.window._last_responses.values():
+                    resp = data.get("response")
+                    if resp and resp.code and resp.code.strip().upper() != "N/A":
+                        has_cached_code = True
+                        break
             
-            self._generation_request_id += 1
-            self.executor.submit(
-                self._generate_for_question,
-                q,
-                checked,
-                self._generation_request_id,
-                True,
-                False,
-            )
+            if checked and not has_cached_code:
+                self.window._update_all_responses_layout()
+                self.window.status_changed.emit("Regenerating coding solution...")
+                self.window.set_coding_busy(True)
+                self._busy = True
+                self._generation_request_id += 1
+                self.executor.submit(
+                    self._generate_for_question,
+                    q,
+                    checked,
+                    self._generation_request_id,
+                    True,
+                    False,
+                )
+            else:
+                if checked:
+                    self.window.status_changed.emit("Coding mode active")
+                else:
+                    self.window.status_changed.emit("Standard mode active")
+                self.window._update_all_responses_layout()
         else:
+            self.window._update_all_responses_layout()
             if checked:
                 self.window.status_changed.emit("Coding mode armed for next question")
             else:
@@ -246,25 +270,39 @@ class InterviewApp:
             "height": geom.height(),
         } if geom else None
         
-        # Hide overlay window before screenshot to avoid capturing WboxAI overlay itself
-        self.window.hide()
-        QTimer.singleShot(150, lambda: self._scan_step_capture_and_restore(screen_info))
+        # Capture screen for processing
+        if sys.platform == "win32":
+            from capture_exclude import apply_to_window
+            self._was_excluded = config.INVISIBLE_IN_SHARE
+            if not self._was_excluded:
+                apply_to_window(self.window)
+            self._scan_step_capture_and_restore(screen_info)
+        else:
+            self.window.hide()
+            QTimer.singleShot(150, lambda: self._scan_step_capture_and_restore(screen_info))
 
     def _scan_step_capture_and_restore(self, screen_info: dict | None) -> None:
         try:
-            # Capture synchronously to guarantee WboxAI is hidden before screenshot is taken
             detail = self._pending_scan_detail
             max_w = 1920 if detail == "high" else None
             quality = 88 if detail == "high" else None
             jpeg = capture_screen_jpeg(max_width=max_w, quality=quality, screen_info=screen_info)
             
-            # Restore the window immediately
-            self.window.show()
+            if sys.platform == "win32":
+                if not getattr(self, "_was_excluded", False):
+                    from capture_exclude import restore_window
+                    restore_window(self.window)
+            else:
+                self.window.show()
             
-            # Emit jpeg ready to start solver thread
             self.bridge.jpeg_ready.emit(jpeg, detail)
         except Exception as e:
-            self.window.show()
+            if sys.platform == "win32":
+                if not getattr(self, "_was_excluded", False):
+                    from capture_exclude import restore_window
+                    restore_window(self.window)
+            else:
+                self.window.show()
             self.bridge.jpeg_ready.emit(b"", self._pending_scan_detail)
             self.bridge.error.emit(format_api_error(e))
             traceback.print_exc()
@@ -300,10 +338,18 @@ class InterviewApp:
             self._busy = True
             history = list(self.conversation)
 
+        has_started = False
         def on_chunk(parsed: ParsedResponse) -> None:
+            nonlocal has_started
             with self._generation_lock:
                 if request_id < self._generation_request_id:
                     return
+            if not has_started:
+                has_started = True
+                if force_coding:
+                    self.bridge.status.emit("Generating coding solution (streaming)...")
+                else:
+                    self.bridge.status.emit("Generating answer (streaming)...")
             self.bridge.answer.emit({"provider": "openai", "response": parsed})
 
         def is_cancelled() -> bool:
@@ -361,6 +407,7 @@ class InterviewApp:
             self.window.status_changed.emit(
                 f"Watch on (every {config.SCREEN_WATCH_INTERVAL_SEC}s)"
             )
+            QTimer.singleShot(0, self._watch_tick_start)
         else:
             self._watch_timer.stop()
             self._watch_capture_pending = False

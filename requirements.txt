@@ -14,3 +14,6 @@ fastapi
 uvicorn
 deepgram-sdk
 pypdf
+pyaudiowpatch>=0.2.12.8; sys_platform == "win32"
+pyinstaller>=6.21.0
+

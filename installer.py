@@ -1044,7 +1044,8 @@ class SetupWizard(QMainWindow):
             if idx == 2:
                 self.pages.setCurrentIndex(3) # Settings Review
             elif idx == 3:
-                self.save_configuration_locally()
+                if not self.save_configuration_locally():
+                    return
                 self.setup_successful = True
                 self.close()
             elif idx == 5:
@@ -1151,7 +1152,7 @@ class SetupWizard(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Save Failed", f"Could not write configuration settings:\n{e}")
 
-    def save_configuration_locally(self):
+    def save_configuration_locally(self) -> bool:
         try:
             frozen = getattr(sys, "frozen", False)
             exe_dir = Path(sys.executable).resolve().parent if frozen else Path(__file__).resolve().parent
@@ -1222,8 +1223,10 @@ class SetupWizard(QMainWindow):
             # Create shortcuts if Windows
             if sys.platform == "win32":
                 self.create_windows_shortcuts(Path(sys.executable).resolve())
+            return True
         except Exception as e:
             QMessageBox.critical(self, "Save Failed", f"Could not write configuration settings:\n{e}")
+            return False
 
     def launch_app(self):
         try:

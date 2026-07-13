@@ -18,7 +18,7 @@ def _white_alpha(percent: float) -> int:
 
 
 def _rgba_white(percent: float) -> str:
-    return f"rgba(255, 255, 255, {_white_alpha(percent)}"
+    return f"rgba(255, 255, 255, {_white_alpha(percent)})"
 
 
 def _see_through_mode() -> bool:
@@ -30,9 +30,9 @@ def _see_through_mode() -> bool:
 def _glass_colors() -> dict[str, str]:
     if _see_through_mode():
         return {
-            "panel": "rgba(255, 255, 255, 1)",
-            "strip": "rgba(255, 255, 255, 1)",
-            "input": "rgba(255, 255, 255, 1)",
+            "panel": "rgba(255, 255, 255, 0)",
+            "strip": "rgba(255, 255, 255, 0)",
+            "input": "rgba(255, 255, 255, 0)",
             "hover": "rgba(255, 255, 255, 25)",
             "border": BORDER_SOFT,
         }
@@ -40,9 +40,9 @@ def _glass_colors() -> dict[str, str]:
     return {
         "panel": _rgba_white(tint),
         "strip": _rgba_white(max(1.0, tint * 0.5)),
-        "input": "transparent" if tint <= 3 else _rgba_white(tint * 0.4),
-        "hover": _rgba_white(min(20.0, tint * 1.2)),
-        "border": _rgba_white(min(18.0, tint)),
+        "input": "transparent" if tint <= 3 else _rgba_white(min(100.0, tint * 0.4)),
+        "hover": _rgba_white(min(35.0, max(8.0, tint * 0.35))),
+        "border": _rgba_white(min(40.0, max(10.0, tint * 0.4))),
     }
 
 
@@ -74,8 +74,8 @@ def stylesheet(*, transparent: bool = True) -> str:
     #hint {{ color: {TEXT_HINT}; font-size: 13px; background: transparent; }}
     QLabel {{ color: {TEXT}; font-size: 15px; background: transparent; }}
     QTextEdit, QPlainTextEdit {{
-        background: transparent;
-        background-color: transparent;
+        background: {input_bg};
+        background-color: {input_bg};
         color: {TEXT};
         font-size: 17px;
         border: 1px solid rgba(255, 255, 255, 45);
@@ -88,19 +88,28 @@ def stylesheet(*, transparent: bool = True) -> str:
         background-color: rgba(0, 0, 0, 120);
         color: {TEXT};
         border: 1px solid {c["border"]};
-        border-radius: 18px;
-        padding: 8px 16px;
-        font-size: 14px;
-        font-weight: 600;
+        height: 30px;
+        border-radius: 15px;
+        padding: 0px 16px;
+        margin: 0px;
+        font-size: 12px;
+        font-weight: normal;
     }}
     QPushButton#primary:hover, QToolButton#primary:hover {{ background-color: rgba(0, 0, 0, 160); }}
+    QPushButton#primary:checked, QToolButton#primary:checked {{
+        background-color: rgba(59, 130, 246, 180);
+        color: #FFFFFF;
+        border: 1px solid rgba(59, 130, 246, 240);
+    }}
     QPushButton#ghost, QToolButton#ghost {{
         background-color: rgba(0, 0, 0, 80);
         color: {TEXT};
         border: 1px solid {c["border"]};
-        border-radius: 18px;
-        padding: 8px 14px;
-        font-size: 14px;
+        height: 30px;
+        border-radius: 15px;
+        padding: 0px 14px;
+        margin: 0px;
+        font-size: 12px;
     }}
     QPushButton#ghost:hover, QToolButton#ghost:hover {{ background-color: rgba(0, 0, 0, 120); }}
     QPushButton#ghost:checked, QToolButton#ghost:checked {{
@@ -112,12 +121,31 @@ def stylesheet(*, transparent: bool = True) -> str:
         background: transparent;
         color: {TEXT};
         border: none;
-        border-radius: 14px;
-        font-size: 19px;
-        font-weight: bold;
+        height: 30px;
+        width: 30px;
+        border-radius: 15px;
+        font-size: 17px;
+        font-weight: normal;
         padding: 0;
+        margin: 0px;
     }}
     QPushButton#close:hover, QToolButton#close:hover {{ background-color: {c["hover"]}; color: {TEXT}; }}
+    QPushButton#refresh, QToolButton#refresh {{
+        background-color: rgba(0, 0, 0, 90);
+        color: {TEXT};
+        border: 1px solid {c["border"]};
+        height: 30px;
+        width: 30px;
+        border-radius: 15px;
+        font-size: 17px;
+        font-weight: normal;
+        padding: 0;
+        margin: 0px;
+    }}
+    QPushButton#refresh:hover, QToolButton#refresh:hover {{
+        background-color: rgba(0, 0, 0, 140);
+        color: {TEXT};
+    }}
     QToolButton {{
         padding: 8px 14px;
     }}
@@ -146,5 +174,30 @@ def stylesheet(*, transparent: bool = True) -> str:
     }}
     QMenu::item:checked {{
         font-weight: bold;
+    }}
+    QSlider#blur_slider {{
+        height: 12px;
+        background: transparent;
+        margin: 4px 0px;
+    }}
+    QSlider#blur_slider::groove:horizontal {{
+        height: 4px;
+        background: rgba(255, 255, 255, 30);
+        border-radius: 2px;
+    }}
+    QSlider#blur_slider::sub-page:horizontal {{
+        background: rgba(255, 255, 255, 100);
+        border-radius: 2px;
+    }}
+    QSlider#blur_slider::handle:horizontal {{
+        width: 12px;
+        height: 12px;
+        margin-top: -4px;
+        margin-bottom: -4px;
+        border-radius: 6px;
+        background: {TEXT};
+    }}
+    QSlider#blur_slider::handle:horizontal:hover {{
+        background: #3b82f6;
     }}
     """

@@ -24,6 +24,7 @@ from PyQt6.QtGui import (
     QKeySequence,
     QMouseEvent,
     QPainter,
+    QPainterPath,
     QPalette,
     QPen,
     QShortcut,
@@ -39,6 +40,8 @@ from PyQt6.QtWidgets import (
     QMenu,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
+    QSlider,
     QTextEdit,
     QToolButton,
     QVBoxLayout,
@@ -55,6 +58,35 @@ _DRAG_STRIP_H = 28
 _RESIZE_GRIP = 22
 
 
+class _ContrastLabel(QLabel):
+    """Label text with a strong outline so it stays readable over any desktop."""
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        font = self.font()
+        font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+
+        metrics = painter.fontMetrics()
+        text = self.text()
+        text_rect = metrics.boundingRect(text)
+        x = (self.width() - text_rect.width()) / 2 - text_rect.x()
+        y = (self.height() + metrics.ascent() - metrics.descent()) / 2
+
+        path = QPainterPath()
+        path.addText(x, y, font, text)
+
+        painter.setPen(QPen(QColor(0, 0, 0, 235), 4))
+        painter.setBrush(QColor(255, 255, 255, 250))
+        painter.drawPath(path)
+        painter.setPen(QPen(QColor(255, 255, 255, 250), 1))
+        painter.setBrush(QColor(255, 255, 255, 250))
+        painter.drawPath(path)
+        painter.end()
+
+
 class _DragStrip(QWidget):
     """Top bar — drag to move (visible + hit-testable on Windows)."""
 
@@ -66,7 +98,7 @@ class _DragStrip(QWidget):
         self.setFixedHeight(_DRAG_STRIP_H)
         self.setToolTip("Drag here to move the window")
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
-        grip = QLabel("⋮⋮⋮  drag to move")
+        grip = _ContrastLabel(":::  drag to move")
         grip.setObjectName("drag_grip")
         grip.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # Let the strip receive presses made directly on the label text.
@@ -115,18 +147,22 @@ class _DragStrip(QWidget):
 
 
 class QToggleSwitch(QAbstractButton):
-    def __init__(self, parent=None, text=""):
+    def __init__(self, parent=None, text="", mini_thumb=True):
         super().__init__(parent)
         self.setText(text)
         self.setCheckable(True)
         self.setSizePolicy(self.sizePolicy().Policy.Fixed, self.sizePolicy().Policy.Fixed)
-        self._thumb_position = 3.0
+        self._is_mini_thumb = mini_thumb
+        self._thumb_diameter = 14.0 if mini_thumb else 22.0
+        self._thumb_position = 15.0 - (self._thumb_diameter / 2.0)
+        
         self._animation = QPropertyAnimation(self, b"thumb_position", self)
         self._animation.setDuration(120)
         self._animation.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self._is_light = False
         
-        self._height = 24
-        self._width = max(64, len(text) * 8 + 32) if text else 46
+        self._height = 30
+        self._width = max(68, len(text) * 7 + 32) if text else 52
         self.setFixedSize(self._width, self._height)
         
     @pyqtProperty(float)
@@ -141,7 +177,9 @@ class QToggleSwitch(QAbstractButton):
     def nextCheckState(self) -> None:
         super().nextCheckState()
         start = self._thumb_position
-        end = float(self.width() - self.height() + 3.0) if self.isChecked() else 3.0
+        x_unchecked = 15.0 - (self._thumb_diameter / 2.0)
+        x_checked = float(self.width()) - 15.0 - (self._thumb_diameter / 2.0)
+        end = x_checked if self.isChecked() else x_unchecked
         self._animation.stop()
         self._animation.setStartValue(start)
         self._animation.setEndValue(end)
@@ -150,45 +188,64 @@ class QToggleSwitch(QAbstractButton):
     def setChecked(self, checked: bool) -> None:
         super().setChecked(checked)
         self._animation.stop()
-        self._thumb_position = float(self.width() - self.height() + 3.0) if checked else 3.0
+        x_unchecked = 15.0 - (self._thumb_diameter / 2.0)
+        x_checked = float(self.width()) - 15.0 - (self._thumb_diameter / 2.0)
+        self._thumb_position = x_checked if checked else x_unchecked
         self.update()
+
+    def set_light_mode(self, is_light: bool) -> None:
+        if self._is_light != is_light:
+            self._is_light = is_light
+            self.update()
         
     def paintEvent(self, event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # Colors: checked track uses Premium Blue, unchecked uses frosted transparent gray
-        bg_checked = QColor(59, 130, 246, 220)  # Premium Blue
-        bg_unchecked = QColor(255, 255, 255, 60)  # Frosted transparent gray
-        thumb_color = QColor(255, 255, 255)
+        # Colors: checked track uses Premium Blue, unchecked matches primary button
+        bg_checked = QColor(59, 130, 246, 180)  # Matches QPushButton#primary:checked
+        border_checked = QColor(59, 130, 246, 240)
+        
+        thumb_color = QColor(255, 255, 255) # Standard white thumb handle for contrast
+        text_color = QColor(255, 255, 255)
+        
+        if self._is_light:
+            bg_unchecked = QColor(0, 0, 0, 180)  # Matches QPushButton#primary on light bg
+            border_unchecked = QColor(0, 0, 0, 60)
+        else:
+            bg_unchecked = QColor(0, 0, 0, 120)  # Matches QPushButton#primary on dark bg
+            border_unchecked = QColor(255, 255, 255, 45)
+            
+        bg = bg_checked if self.isChecked() else bg_unchecked
+        border_color = border_checked if self.isChecked() else border_unchecked
         
         rect = self.rect()
         radius = rect.height() / 2.0
         
-        # Draw background track
-        p.setPen(Qt.PenStyle.NoPen)
-        bg = bg_checked if self.isChecked() else bg_unchecked
+        # Draw background track with borders to match push buttons
+        p.setPen(QPen(border_color, 1))
         p.setBrush(QBrush(bg))
-        p.drawRoundedRect(rect.x(), rect.y(), rect.width(), rect.height(), radius, radius)
+        p.drawRoundedRect(rect.x() + 1, rect.y() + 1, rect.width() - 2, rect.height() - 2, radius - 1, radius - 1)
         
         # Draw text inside track if present
         if self.text():
-            p.setPen(QColor(255, 255, 255, 220) if self.isChecked() else QColor(255, 255, 255, 140))
-            font = QFont("Segoe UI" if config.IS_WINDOWS else ".AppleSystemUIFont", 8, QFont.Weight.Bold)
+            p.setPen(text_color)
+            font = QFont("Segoe UI" if config.IS_WINDOWS else ".AppleSystemUIFont", 10)
             p.setFont(font)
             if self.isChecked():
                 # Thumb is on the right, draw text on the left
-                text_rect = QRect(4, 0, self.width() - self.height(), self.height())
+                text_rect = QRect(6, 0, self.width() - self.height() + 2, self.height())
                 p.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self.text())
             else:
                 # Thumb is on the left, draw text on the right
-                text_rect = QRect(self.height() - 4, 0, self.width() - self.height(), self.height())
+                text_rect = QRect(self.height() - 6, 0, self.width() - self.height() + 2, self.height())
                 p.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self.text())
         
         # Draw thumb handle
-        thumb_diameter = rect.height() - 6.0
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QBrush(thumb_color))
-        p.drawEllipse(int(self._thumb_position), 3, int(thumb_diameter), int(thumb_diameter))
+        y_coord = 15.0 - (self._thumb_diameter / 2.0)
+        p.drawEllipse(int(self._thumb_position), int(y_coord), int(self._thumb_diameter), int(self._thumb_diameter))
         p.end()
 
 
@@ -432,6 +489,66 @@ def show_resume_dialog(parent=None) -> None:
     dialog.exec()
 
 
+class QSpinButton(QPushButton):
+    """Button that spins its text/icon clockwise when clicked."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._rotation_angle = 0.0
+        self._animation = None
+
+    @pyqtProperty(float)
+    def rotation_angle(self) -> float:
+        return self._rotation_angle
+
+    @rotation_angle.setter
+    def rotation_angle(self, angle: float) -> None:
+        self._rotation_angle = angle
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw background and border
+        from PyQt6.QtWidgets import QStyleOptionButton, QStyle
+        opt = QStyleOptionButton()
+        self.initStyleOption(opt)
+        text_copy = opt.text
+        opt.text = ""
+        self.style().drawControl(QStyle.ControlElement.CE_PushButton, opt, painter, self)
+        
+        # Draw rotated text centered
+        painter.save()
+        cx = self.width() / 2.0
+        cy = self.height() / 2.0
+        painter.translate(cx, cy)
+        painter.rotate(self._rotation_angle)
+        
+        painter.setFont(self.font())
+        fm = painter.fontMetrics()
+        rect = fm.boundingRect(text_copy)
+        tx = -rect.width() / 2.0 - rect.x()
+        ty = -rect.height() / 2.0 - rect.y()
+        
+        # Use text color from theme palette
+        color = self.palette().color(QPalette.ColorRole.ButtonText)
+        painter.setPen(color)
+        painter.drawText(int(tx), int(ty), text_copy)
+        painter.restore()
+        painter.end()
+
+    def trigger_spin(self) -> None:
+        if self._animation and self._animation.state() == QPropertyAnimation.State.Running:
+            return
+        self._animation = QPropertyAnimation(self, b"rotation_angle", self)
+        self._animation.setDuration(600)
+        self._animation.setStartValue(0.0)
+        self._animation.setEndValue(360.0)
+        self._animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        self._animation.start()
+
+
 class OverlayWindow(QMainWindow):
     answer_ready = pyqtSignal(object)
     status_changed = pyqtSignal(str)
@@ -439,6 +556,7 @@ class OverlayWindow(QMainWindow):
     force_coding_requested = pyqtSignal()
     scan_screen_requested = pyqtSignal()
     watch_screen_toggled = pyqtSignal(bool)
+    refresh_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -472,6 +590,9 @@ class OverlayWindow(QMainWindow):
         self._contrast_timer = QTimer(self)
         self._contrast_timer.timeout.connect(self._check_screen_contrast)
         self._contrast_timer.start(2000)
+
+        self._auto_hide_timer = QTimer(self)
+        self._auto_hide_timer.timeout.connect(self._on_auto_hide_timeout)
 
     def _setup_ui(self) -> None:
         self.setWindowTitle("WboxAI")
@@ -521,35 +642,55 @@ class OverlayWindow(QMainWindow):
         layout.addWidget(self._drag_strip)
 
         header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
         title = QLabel("WboxAI")
         title.setObjectName("title")
         header.addWidget(title)
         header.addStretch()
 
-        self.btn_coding = QToggleSwitch(text="Coding")
+        # Group 1: Toggle switches
+        self.btn_coding = QToggleSwitch(text="Coding", mini_thumb=True)
         self.btn_coding.setChecked(False)
         self.btn_coding.toggled.connect(self._on_force_coding_click)
         header.addWidget(self.btn_coding)
-
-        self.btn_scan = QPushButton("Scan screen")
-        self.btn_scan.setObjectName("primary")
-        self.btn_scan.clicked.connect(self._on_scan_button_clicked)
-        header.addWidget(self.btn_scan)
-
-        self.btn_auto_scan = QToggleSwitch(text="Auto")
-        self.btn_auto_scan.setChecked(False)
-        self.btn_auto_scan.toggled.connect(self._on_auto_scan_toggled)
-        header.addWidget(self.btn_auto_scan)
 
         self.btn_share_hide = QToggleSwitch(text="Share-Hide")
         self.btn_share_hide.setChecked(config.INVISIBLE_IN_SHARE)
         self.btn_share_hide.toggled.connect(self._on_share_hide_toggle)
         header.addWidget(self.btn_share_hide)
 
+        # Group 2: Regular action text buttons
+        self.btn_scan = QPushButton("Scan screen")
+        self.btn_scan.setObjectName("primary")
+        self.btn_scan.clicked.connect(self._on_scan_button_clicked)
+
+        self.btn_auto_scan = QToggleSwitch(text="Auto")
+        self.btn_auto_scan.setFixedHeight(30)
+        self.btn_auto_scan.setFixedWidth(64)
+        self.btn_auto_scan.setMaximumWidth(0)
+        self.btn_auto_scan.hide()
+        self.btn_auto_scan.toggled.connect(self._on_auto_scan_toggled)
+
+        scan_layout = QHBoxLayout()
+        scan_layout.setContentsMargins(0, 0, 0, 0)
+        scan_layout.setSpacing(4)
+        scan_layout.addWidget(self.btn_scan)
+        scan_layout.addWidget(self.btn_auto_scan)
+        header.addLayout(scan_layout)
+
         self.btn_listen = QPushButton("Start listening")
         self.btn_listen.setObjectName("primary")
         self.btn_listen.clicked.connect(self._on_listen_click)
         header.addWidget(self.btn_listen)
+
+        # Group 3: Utility symbol buttons
+        self.btn_refresh = QSpinButton("↻")
+        self.btn_refresh.setObjectName("refresh")
+        self.btn_refresh.setFixedSize(30, 30)
+        self.btn_refresh.setToolTip("Abort and Refresh LLM")
+        self.btn_refresh.clicked.connect(self._on_refresh_clicked)
+        header.addWidget(self.btn_refresh)
 
         self.btn_close = QPushButton("✕")
         self.btn_close.setObjectName("close")
@@ -559,6 +700,15 @@ class OverlayWindow(QMainWindow):
         header.addWidget(self.btn_close)
 
         layout.addLayout(header)
+
+        # Opacity slider: 0 = transparent, 100 = solid panel.
+        self.blur_slider = QSlider(Qt.Orientation.Horizontal)
+        self.blur_slider.setObjectName("blur_slider")
+        self.blur_slider.setRange(0, 100)
+        self.blur_slider.setValue(int(config.GLASS_PANEL_TINT_PERCENT))
+        self.blur_slider.setToolTip("Adjust overlay opacity")
+        self.blur_slider.valueChanged.connect(self._on_blur_changed)
+        layout.addWidget(self.blur_slider)
 
         self.status_label = QLabel("Ready")
         self.status_label.setObjectName("status")
@@ -572,6 +722,8 @@ class OverlayWindow(QMainWindow):
         layout.addWidget(self.question_box)
 
         self.providers_layout = QHBoxLayout()
+        self.providers_layout.setContentsMargins(0, 0, 0, 0)
+        self.providers_layout.setSpacing(10)
         layout.addLayout(self.providers_layout, stretch=1)
 
         self.columns = {}
@@ -586,6 +738,7 @@ class OverlayWindow(QMainWindow):
         else:
             for provider in active:
                 col_widget = QWidget()
+                col_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 col_layout = QVBoxLayout(col_widget)
                 col_layout.setContentsMargins(0, 0, 0, 0)
                 col_layout.setSpacing(8)
@@ -595,6 +748,7 @@ class OverlayWindow(QMainWindow):
 
                 answer_box = QTextEdit()
                 answer_box.setReadOnly(True)
+                answer_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 self._make_see_through_edit(answer_box)
                 col_layout.addWidget(answer_box, stretch=1)
 
@@ -620,7 +774,7 @@ class OverlayWindow(QMainWindow):
                 code_box.setMaximumHeight(200)
                 code_layout.addWidget(code_box)
 
-                col_layout.addWidget(code_sec)
+                col_layout.addWidget(code_sec, stretch=0)
                 code_sec.hide()
 
                 # Save references before connecting
@@ -636,7 +790,7 @@ class OverlayWindow(QMainWindow):
                 # Bind the specific code_box to copy function
                 btn_copy.clicked.connect(lambda checked, cb=code_box: self._on_copy_provider_code(cb))
 
-                self.providers_layout.addWidget(col_widget)
+                self.providers_layout.addWidget(col_widget, stretch=1)
 
         hint = QLabel("Hover + scroll here · drag top bar to move · Ctrl+H hide")
         hint.setObjectName("hint")
@@ -688,6 +842,7 @@ class OverlayWindow(QMainWindow):
         else:
             self._apply_panel_shadow(central)
         self.setStyleSheet(glass_stylesheet(transparent=self._transparent))
+        self.set_text_color_mode(is_light_bg=False)
         QApplication.setFont(QFont("Segoe UI" if config.IS_WINDOWS else ".AppleSystemUIFont", 14))
 
         QShortcut(QKeySequence("Ctrl+H"), self, self.hide)
@@ -703,13 +858,18 @@ class OverlayWindow(QMainWindow):
     def _make_see_through_edit(self, edit: QTextEdit | QPlainTextEdit) -> None:
         """Force text areas transparent with a strong text outline/halo so it works on any background."""
         self._make_translucent_widget(edit)
+        edit.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        edit.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        edit.viewport().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        edit.viewport().setAutoFillBackground(False)
         pal = edit.palette()
-        pal.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0, 1))
+        pal.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0, 0))
         pal.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
         edit.setPalette(pal)
         edit.setStyleSheet(
-            "background: rgba(0, 0, 0, 1); background-color: rgba(0, 0, 0, 1); border: none; color: #FFFFFF;"
+            "background: transparent; background-color: transparent; border: none; color: #FFFFFF;"
         )
+        edit.viewport().setStyleSheet("background: transparent; background-color: transparent;")
         self._apply_text_halo(edit)
 
     def _apply_stealth_focus(self, central: QWidget) -> None:
@@ -731,8 +891,10 @@ class OverlayWindow(QMainWindow):
             self.btn_scan,
             self.btn_auto_scan,
             self.btn_share_hide,
+            self.btn_refresh,
             self.btn_listen,
             self.btn_close,
+            self.blur_slider,
         ] + [col["btn_copy"] for col in self.columns.values()]
 
         for btn in buttons:
@@ -770,6 +932,27 @@ class OverlayWindow(QMainWindow):
         bar = target.verticalScrollBar()
         step = max(20, abs(delta_y) // 3)
         bar.setValue(bar.value() - step if delta_y > 0 else bar.value() + step)
+
+    def _handle_hover_wheel(self, global_pos: QPoint, delta_y: int) -> bool:
+        target = self._scroll_target_at(global_pos)
+        if target is None:
+            return False
+        self._apply_wheel_scroll(target, delta_y)
+        return True
+
+    @staticmethod
+    def _scroll_to_bottom(target: QTextEdit | QPlainTextEdit) -> None:
+        bar = target.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+    def _set_plain_text_autoscroll(
+        self,
+        target: QTextEdit | QPlainTextEdit,
+        text: str,
+    ) -> None:
+        target.setPlainText(text)
+        self._scroll_to_bottom(target)
+        QTimer.singleShot(0, lambda target=target: self._scroll_to_bottom(target))
 
     @staticmethod
     def _apply_text_halo(widget: QWidget) -> None:
@@ -817,9 +1000,10 @@ class OverlayWindow(QMainWindow):
         et = event.type()
 
         if et == QEvent.Type.Wheel and isinstance(event, QWheelEvent):
-            target = self._scroll_target_at(event.globalPosition().toPoint())
-            if target is not None:
-                self._apply_wheel_scroll(target, event.angleDelta().y())
+            if self._handle_hover_wheel(
+                event.globalPosition().toPoint(),
+                event.angleDelta().y(),
+            ):
                 event.accept()
                 return True
             return False
@@ -827,9 +1011,10 @@ class OverlayWindow(QMainWindow):
         return False
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        target = self._scroll_target_at(event.globalPosition().toPoint())
-        if target is not None:
-            self._apply_wheel_scroll(target, event.angleDelta().y())
+        if self._handle_hover_wheel(
+            event.globalPosition().toPoint(),
+            event.angleDelta().y(),
+        ):
             event.accept()
 
     def mousePressEvent(self, event) -> None:
@@ -988,6 +1173,24 @@ class OverlayWindow(QMainWindow):
         self.wizard.closed.connect(on_wizard_closed)
         self.wizard.show()
 
+    def _on_refresh_clicked(self) -> None:
+        self.btn_refresh.trigger_spin()
+        self.refresh_requested.emit()
+        self.schedule_exclude()
+
+    def clear_responses(self) -> None:
+        self._last_question = ""
+        self.question_box.clear()
+        if hasattr(self, "_last_responses"):
+            self._last_responses.clear()
+        for provider, col in self.columns.items():
+            col["answer_box"].clear()
+            col["code_box"].clear()
+            col["code_section"].hide()
+            col["header"].setText(f"{provider.capitalize()} Answer")
+        self.apply_normal_layout()
+        self.schedule_exclude()
+
     def _on_listen_click(self) -> None:
         self._listening = not self._listening
         self.btn_listen.setText("Stop listening" if self._listening else "Start listening")
@@ -995,19 +1198,60 @@ class OverlayWindow(QMainWindow):
         self.schedule_exclude()
 
     def _on_force_coding_click(self, *args) -> None:
+        self._update_all_responses_layout()
         self.force_coding_requested.emit()
         self.schedule_exclude()
 
     def set_coding_busy(self, busy: bool) -> None:
         self.btn_coding.setEnabled(not busy)
 
+    def _on_blur_changed(self, val: int) -> None:
+        opacity = max(0.0, min(100.0, float(val)))
+        config.GLASS_PANEL_TINT_PERCENT = opacity
+        config.GLASS_SEE_THROUGH = opacity <= 1.0
+        config.GLASS_BLUR_PERCENT = min(24.0, opacity * 0.24)
+        self.setStyleSheet(glass_stylesheet(transparent=self._transparent))
+        self.set_text_color_mode(is_light_bg=opacity >= 55.0)
+        apply_glass_backdrop(self, config.GLASS_BLUR_PERCENT)
+        self._drag_strip.update()
+        self.schedule_exclude()
+
     def _on_scan_button_clicked(self) -> None:
         self.scan_screen_requested.emit()
+        self._animate_auto_scan(True)
+        self._auto_hide_timer.start(10000) # Show for 10 seconds
         self.schedule_exclude()
 
     def _on_auto_scan_toggled(self, checked: bool) -> None:
         self.watch_screen_toggled.emit(checked)
+        if checked:
+            self._auto_hide_timer.stop() # Keep it open
+        else:
+            self._animate_auto_scan(False) # Slide back in
         self.schedule_exclude()
+
+    def _on_auto_hide_timeout(self) -> None:
+        self._auto_hide_timer.stop()
+        if not self.btn_auto_scan.isChecked():
+            self._animate_auto_scan(False)
+
+    def _animate_auto_scan(self, show: bool) -> None:
+        if show:
+            self.btn_auto_scan.show()
+            self._auto_scan_anim = QPropertyAnimation(self.btn_auto_scan, b"maximumWidth")
+            self._auto_scan_anim.setDuration(250)
+            self._auto_scan_anim.setStartValue(self.btn_auto_scan.maximumWidth())
+            self._auto_scan_anim.setEndValue(64)
+            self._auto_scan_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self._auto_scan_anim.start()
+        else:
+            self._auto_scan_anim = QPropertyAnimation(self.btn_auto_scan, b"maximumWidth")
+            self._auto_scan_anim.setDuration(250)
+            self._auto_scan_anim.setStartValue(self.btn_auto_scan.width())
+            self._auto_scan_anim.setEndValue(0)
+            self._auto_scan_anim.setEasingCurve(QEasingCurve.Type.InCubic)
+            self._auto_scan_anim.finished.connect(self.btn_auto_scan.hide)
+            self._auto_scan_anim.start()
 
     def _on_share_hide_toggle(self, checked: bool) -> None:
         config.INVISIBLE_IN_SHARE = checked
@@ -1081,39 +1325,77 @@ class OverlayWindow(QMainWindow):
         for col in self.columns.values():
             col["code_box"].setMaximumHeight(self._code_box_max_default)
 
+    def _update_all_responses_layout(self) -> None:
+        is_coding_active = self.btn_coding.isChecked()
+        has_any_code_layout = False
+        
+        for provider, col in self.columns.items():
+            if is_coding_active:
+                col["code_section"].show()
+                col["header"].setText(f"{provider.capitalize()} (Approach)")
+                
+                response = None
+                if hasattr(self, "_last_responses") and self._last_responses and provider in self._last_responses:
+                    response = self._last_responses[provider].get("response")
+                
+                if response:
+                    self._set_plain_text_autoscroll(col["answer_box"], response.approach or response.full_text)
+                    code_text = response.code or ""
+                    if not code_text or code_text.strip().upper() == "N/A":
+                        code_text = f"// Generating coding solution for '{self.question_box.toPlainText()[:40]}...' - Please wait..."
+                    self._set_plain_text_autoscroll(col["code_box"], code_text)
+                else:
+                    self._set_plain_text_autoscroll(col["answer_box"], "")
+                    self._set_plain_text_autoscroll(col["code_box"], "// Ready for coding problem")
+                has_any_code_layout = True
+            else:
+                col["code_section"].hide()
+                col["header"].setText(f"{provider.capitalize()} Answer")
+                
+                response = None
+                if hasattr(self, "_last_responses") and self._last_responses and provider in self._last_responses:
+                    response = self._last_responses[provider].get("response")
+                
+                if response:
+                    full_content = response.approach or response.full_text
+                    if response.code and response.code.strip().upper() != "N/A":
+                        if "```" not in full_content:
+                            full_content += f"\n\nCode:\n```{config.CODE_LANGUAGE}\n{response.code}\n```"
+                    self._set_plain_text_autoscroll(col["answer_box"], full_content)
+                else:
+                    self._set_plain_text_autoscroll(col["answer_box"], "")
+                    self._set_plain_text_autoscroll(col["code_box"], "")
+                
+        if has_any_code_layout:
+            self.apply_coding_layout()
+        else:
+            self.apply_normal_layout()
+        self.schedule_exclude()
+
     def _set_response(self, data: dict) -> None:
         if not isinstance(data, dict):
             return
         provider = data.get("provider")
-        response = data.get("response")
         if provider not in self.columns:
             return
 
-        col = self.columns[provider]
-        if (response.is_coding or response.code) and self.btn_coding.isChecked():
-            col["code_section"].show()
-            col["header"].setText(f"{provider.capitalize()} (Approach)")
-            col["answer_box"].setPlainText(response.approach or response.full_text)
-            col["code_box"].setPlainText(response.code)
-            self.apply_coding_layout()
-        else:
-            col["code_section"].hide()
-            col["header"].setText(f"{provider.capitalize()} Answer")
-            full_content = response.approach or response.full_text
-            if response.code and not self.btn_coding.isChecked():
-                if "```" not in full_content:
-                    full_content += f"\n\nCode:\n```{config.CODE_LANGUAGE}\n{response.code}\n```"
-            col["answer_box"].setPlainText(full_content)
-            self.btn_coding.setChecked(False)
-            self.apply_normal_layout()
-        self.schedule_exclude()
+        if not hasattr(self, "_last_responses"):
+            self._last_responses = {}
+        self._last_responses[provider] = data
+
+        self._update_all_responses_layout()
 
     def set_watch_checked(self, checked: bool) -> None:
         self.btn_auto_scan.setChecked(checked)
+        if checked:
+            self._animate_auto_scan(True)
+            self._auto_hide_timer.stop()
+        else:
+            self._animate_auto_scan(False)
 
     def set_question(self, text: str) -> None:
         self._last_question = text
-        self.question_box.setPlainText(text)
+        self._set_plain_text_autoscroll(self.question_box, text)
 
     def get_last_question(self) -> str:
         return self._last_question
@@ -1156,21 +1438,172 @@ class OverlayWindow(QMainWindow):
             boxes.append(col["answer_box"])
             boxes.append(col["code_box"])
 
+        tint = max(0.0, min(100.0, float(config.GLASS_PANEL_TINT_PERCENT)))
+        box_alpha = 0 if tint <= 3.0 else max(1, min(255, int(255 * min(100.0, tint * 0.4) / 100.0)))
+        box_bg = "transparent" if box_alpha == 0 else f"rgba(255, 255, 255, {box_alpha})"
         for box in boxes:
             box.setStyleSheet(
-                f"background: transparent; background-color: transparent; border: none; color: {color_str};"
+                f"background: {box_bg}; background-color: {box_bg}; border: none; color: {color_str};"
+            )
+            box.viewport().setStyleSheet(
+                f"background: {box_bg}; background-color: {box_bg};"
             )
             fx = box.graphicsEffect()
             if isinstance(fx, QGraphicsDropShadowEffect):
                 fx.setColor(shadow_color)
 
-        label_style = f"background: transparent; color: {color_str};"
         for lbl in self.findChildren(QLabel):
-            if lbl.objectName() in ("title", "section", "hint") or isinstance(lbl, QLabel):
-                lbl.setStyleSheet(label_style)
+            obj_name = lbl.objectName()
+            if obj_name in ("title", "section", "hint", "drag_grip", "status") or isinstance(lbl, QLabel):
+                if obj_name:
+                    lbl.setStyleSheet(f"#{obj_name} {{ background: transparent; color: {color_str}; }}")
+                else:
+                    lbl.setStyleSheet(f"background: transparent; color: {color_str};")
                 fx = lbl.graphicsEffect()
                 if isinstance(fx, QGraphicsDropShadowEffect):
                     fx.setColor(shadow_color)
+
+        # Update QToggleSwitch contrast settings
+        for sw in self.findChildren(QToggleSwitch):
+            sw.set_light_mode(is_light_bg)
+
+        # Update buttons styling based on contrast
+        if is_light_bg:
+            btn_primary_style = """
+                QPushButton#primary, QToolButton#primary {
+                    background-color: rgba(0, 0, 0, 180);
+                    color: #FFFFFF;
+                    border: 1px solid rgba(0, 0, 0, 60);
+                    height: 30px;
+                    border-radius: 15px;
+                    padding: 0px 16px;
+                    margin: 0px;
+                    font-size: 12px;
+                    font-weight: normal;
+                }
+                QPushButton#primary:hover, QToolButton#primary:hover {
+                    background-color: rgba(0, 0, 0, 225);
+                }
+            """
+            btn_refresh_style = """
+                QPushButton#refresh {
+                    background-color: rgba(0, 0, 0, 180);
+                    color: #FFFFFF;
+                    border: 1px solid rgba(0, 0, 0, 60);
+                    height: 30px;
+                    width: 30px;
+                    border-radius: 15px;
+                    font-size: 17px;
+                    font-weight: normal;
+                    padding: 0;
+                    margin: 0px;
+                }
+                QPushButton#refresh:hover {
+                    background-color: rgba(0, 0, 0, 225);
+                }
+            """
+            btn_close_style = """
+                QPushButton#close {
+                    background: transparent;
+                    color: #000000;
+                    border: none;
+                    height: 30px;
+                    width: 30px;
+                    border-radius: 15px;
+                    font-size: 17px;
+                    font-weight: normal;
+                    padding: 0;
+                    margin: 0px;
+                }
+                QPushButton#close:hover {
+                    background-color: rgba(0, 0, 0, 25);
+                }
+            """
+            slider_style = """
+                QSlider#blur_slider::groove:horizontal {
+                    background: rgba(0, 0, 0, 30);
+                }
+                QSlider#blur_slider::sub-page:horizontal {
+                    background: rgba(0, 0, 0, 100);
+                }
+                QSlider#blur_slider::handle:horizontal {
+                    background: #000000;
+                }
+            """
+        else:
+            btn_primary_style = """
+                QPushButton#primary, QToolButton#primary {
+                    background-color: rgba(0, 0, 0, 120);
+                    color: rgba(255, 255, 255, 250);
+                    border: 1px solid rgba(255, 255, 255, 45);
+                    height: 30px;
+                    border-radius: 15px;
+                    padding: 0px 16px;
+                    margin: 0px;
+                    font-size: 12px;
+                    font-weight: normal;
+                }
+                QPushButton#primary:hover, QToolButton#primary:hover {
+                    background-color: rgba(0, 0, 0, 160);
+                }
+            """
+            btn_refresh_style = """
+                QPushButton#refresh {
+                    background-color: rgba(0, 0, 0, 90);
+                    color: rgba(255, 255, 255, 250);
+                    border: 1px solid rgba(255, 255, 255, 45);
+                    height: 30px;
+                    width: 30px;
+                    border-radius: 15px;
+                    font-size: 17px;
+                    font-weight: normal;
+                    padding: 0;
+                    margin: 0px;
+                }
+                QPushButton#refresh:hover {
+                    background-color: rgba(0, 0, 0, 140);
+                }
+            """
+            btn_close_style = """
+                QPushButton#close {
+                    background: transparent;
+                    color: rgba(255, 255, 255, 250);
+                    border: none;
+                    height: 30px;
+                    width: 30px;
+                    border-radius: 15px;
+                    font-size: 17px;
+                    font-weight: normal;
+                    padding: 0;
+                    margin: 0px;
+                }
+                QPushButton#close:hover {
+                    background-color: rgba(255, 255, 255, 25);
+                }
+            """
+            slider_style = """
+                QSlider#blur_slider::groove:horizontal {
+                    background: rgba(255, 255, 255, 30);
+                }
+                QSlider#blur_slider::sub-page:horizontal {
+                    background: rgba(255, 255, 255, 100);
+                }
+                QSlider#blur_slider::handle:horizontal {
+                    background: #FFFFFF;
+                }
+            """
+
+        for btn in self.findChildren(QPushButton):
+            obj_name = btn.objectName()
+            if obj_name == "primary":
+                btn.setStyleSheet(btn_primary_style)
+            elif obj_name == "refresh":
+                btn.setStyleSheet(btn_refresh_style)
+            elif obj_name == "close":
+                btn.setStyleSheet(btn_close_style)
+
+        if hasattr(self, "blur_slider"):
+            self.blur_slider.setStyleSheet(slider_style)
 
     # Back-compat for main.py
     def ensure_invisible_to_share(self) -> None:

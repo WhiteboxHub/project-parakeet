@@ -92,7 +92,7 @@ else:
 # White tint on panel (0–100). 0 = transparent, see background text through overlay
 _panel_tint = _env("GLASS_PANEL_TINT_PERCENT", "")
 GLASS_PANEL_TINT_PERCENT = (
-    max(0.0, min(30.0, float(_panel_tint))) if _panel_tint else 0.0
+    max(0.0, min(100.0, float(_panel_tint))) if _panel_tint else 0.0
 )
 
 # True = panel + answer boxes fully transparent (background text partially visible)
