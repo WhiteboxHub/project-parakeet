@@ -972,8 +972,10 @@ class InterviewApp:
                 self.bridge.coding_busy.emit(False)
 
     def run(self) -> int:
+        self.app.setQuitOnLastWindowClosed(False)
         from overlay import show_resume_dialog
         show_resume_dialog()
+        self.app.setQuitOnLastWindowClosed(True)
 
         # Update dynamic filepaths for latency tracker using chosen candidate
         candidate_name = getattr(config, "SELECTED_CANDIDATE_NAME", "UnknownCandidate")

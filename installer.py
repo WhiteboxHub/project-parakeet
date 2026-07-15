@@ -150,6 +150,8 @@ class InstallWorker(QThread):
             if frozen:
                 # Inside PyInstaller package, the app folder contains our main build files
                 src_dir = Path(sys._MEIPASS) / "app"
+                if not src_dir.exists():
+                    src_dir = Path(sys.executable)
             else:
                 # In development, look for dist/main
                 src_dir = Path(__file__).resolve().parent / "dist" / "main"
@@ -232,23 +234,8 @@ class InstallWorker(QThread):
             if wboxai_app_dir.is_dir():
                 (wboxai_app_dir / ".env").write_text("\n".join(env_lines), encoding="utf-8")
 
-            # Create default empty context files if they don't exist
-            self.progress.emit(75, "Creating local context templates...")
-            intro_val = self.config_data.get("intro_text", "").strip() or "Enter details about yourself for introductions."
-            contexts = {
-                "resume_context.txt": "Paste your resume plain text here.",
-                "intro_context.txt": intro_val,
-                "project_overview.txt": "Add details of major projects you worked on."
-            }
-            for name, content in contexts.items():
-                p = self.dest_dir / name
-                if name == "intro_context.txt" or not p.is_file():
-                    p.write_text(content, encoding="utf-8")
-                
-                # Check wboxai_app folder as well
-                p_wboxai = wboxai_app_dir / name
-                if wboxai_app_dir.is_dir() and (name == "intro_context.txt" or not p_wboxai.is_file()):
-                    p_wboxai.write_text(content, encoding="utf-8")
+            # (Context files generation removed per user request)
+            self.progress.emit(75, "Finalizing configuration...")
 
             # Shortcuts creation
             self.progress.emit(90, "Creating system shortcuts...")
@@ -300,9 +287,11 @@ class InstallWorker(QThread):
 
 class SetupWizard(QMainWindow):
     closed = pyqtSignal()
+    token_received_signal = pyqtSignal(str, str)
 
     def __init__(self, config_only=False, first_time_setup=False):
         super().__init__()
+        self.token_received_signal.connect(self.on_token_received)
         self.config_only = config_only
         self.first_time_setup = first_time_setup
         self.setup_successful = False
@@ -384,6 +373,7 @@ class SetupWizard(QMainWindow):
         self.update_navigation()
 
     def closeEvent(self, event):
+        self.stop_local_auth_server()
         self.closed.emit()
         super().closeEvent(event)
 
@@ -615,84 +605,318 @@ class SetupWizard(QMainWindow):
 
     def _setup_web_login_page(self):
         layout = QVBoxLayout(self.page_web_login)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(25, 30, 25, 30)
+        layout.setSpacing(20)
         
         lbl_sync_title = QLabel("Whitebox Learning Sync")
         lbl_sync_title.setObjectName("section_title")
         layout.addWidget(lbl_sync_title)
         
         lbl_sync_desc = QLabel(
-            "Log in to your Whitebox Learning account to instantly sync your "
-            "profile configuration, target job details, and API keys."
+            "Click the button below to log in to your Whitebox Learning account "
+            "in your default web browser. Once logged in, the Setup Wizard will "
+            "automatically detect your credentials and resume synchronization."
         )
         lbl_sync_desc.setWordWrap(True)
+        lbl_sync_desc.setFont(QFont("Segoe UI", 11))
         layout.addWidget(lbl_sync_desc)
         
-        # Step 1: Open external browser
-        btn_open_browser = QPushButton("1. Open Login Page in Browser")
-        btn_open_browser.setObjectName("primary")
-        btn_open_browser.clicked.connect(self.open_wbl_login_browser)
-        layout.addWidget(btn_open_browser)
+        # Primary login button
+        self.btn_open_browser = QPushButton("Log In with Wbox in Browser")
+        self.btn_open_browser.setObjectName("primary")
+        self.btn_open_browser.setMinimumHeight(45)
+        self.btn_open_browser.clicked.connect(self.open_wbl_login_browser)
+        layout.addWidget(self.btn_open_browser)
         
-        # Step 2: Paste token
-        lbl_token = QLabel("2. Paste your Wbox Auth Token / API Key here:")
-        layout.addWidget(lbl_token)
-        
-        self.edit_wbox_token = QLineEdit()
-        self.edit_wbox_token.setPlaceholderText("Paste your wbox_token here...")
-        layout.addWidget(self.edit_wbox_token)
-        
-        # Step 3: Trigger Sync
-        btn_trigger_sync = QPushButton("3. Sync Settings")
-        btn_trigger_sync.clicked.connect(self.sync_wbl_profile)
-        layout.addWidget(btn_trigger_sync)
-        
-        self.web_status_label = QLabel("Ready to sync...")
+        # Status Label
+        self.web_status_label = QLabel("Ready to sync. Click the button above to log in.")
         self.web_status_label.setStyleSheet("color: #38bdf8; font-weight: bold;")
         self.web_status_label.setWordWrap(True)
         layout.addWidget(self.web_status_label)
         
-        self.web_view = None
         layout.addStretch()
 
     def load_web_login(self):
-        self.edit_wbox_token.clear()
-        self.web_status_label.setText("Ready to sync. Click above to open the login page.")
+        self._syncing_token = None
+        self.stop_local_auth_server()
+        self.web_status_label.setText("Ready to sync. Click the button above to log in.")
+        self.btn_open_browser.setEnabled(True)
+
+    def detect_wbl_base_url(self):
+        import urllib.request
+        try:
+            # Check if localhost:3000 is active
+            urllib.request.urlopen("http://localhost:3000", timeout=0.3)
+            return "http://localhost:3000"
+        except Exception:
+            return "https://www.whitebox-learning.com"
 
     def open_wbl_login_browser(self):
         import webbrowser
-        webbrowser.open("https://www.whitebox-learning.com/login")
-        self.web_status_label.setText("Opened login page in browser. Please log in, copy your token from your dashboard/profile, and paste it below.")
+        port = 12180
+        self.start_local_auth_server(port)
+        
+        base_url = self.detect_wbl_base_url()
+        redirect_url = f"http://127.0.0.1:{self.actual_port}/callback"
+        login_url = f"{base_url}/login?redirect_uri={redirect_url}&callback={redirect_url}"
+        
+        webbrowser.open(login_url)
+        self.web_status_label.setText(
+            f"Opened Wbox login in browser (listening on port {self.actual_port}).\n"
+            f"Detected site address: {base_url}\n"
+            "Please log in. This screen will automatically proceed when finished."
+        )
+        self.btn_open_browser.setEnabled(False)
 
-    def sync_wbl_profile(self):
-        token = self.edit_wbox_token.text().strip()
-        if not token:
-            QMessageBox.warning(self, "Validation Error", "Please paste your Wbox Auth Token first.")
+    def start_local_auth_server(self, port=12180):
+        self.stop_local_auth_server()
+        
+        import socket
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        import urllib.parse
+        import json
+        import threading
+        
+        outer_self = self
+        
+        class AuthHandler(BaseHTTPRequestHandler):
+            def log_message(self, format, *args):
+                pass
+                
+            def do_GET(self):
+                self.process_request()
+                
+            def do_POST(self):
+                self.process_request()
+                
+            def process_request(self):
+                try:
+                    with open("server_debug.log", "a") as f:
+                        f.write(f"\n--- Request received ---\n")
+                        f.write(f"Method: {self.command}\n")
+                        f.write(f"Path: {self.path}\n")
+                        f.write("Headers:\n")
+                        for k, v in self.headers.items():
+                            f.write(f"  {k}: {v}\n")
+                except Exception as log_err:
+                    print(f"Failed to write to server_debug.log: {log_err}")
+
+                parsed = urllib.parse.urlparse(self.path)
+                params = urllib.parse.parse_qs(parsed.query)
+                
+                token = None
+                for key, val_list in params.items():
+                    key_lower = key.lower()
+                    if "token" in key_lower or "jwt" in key_lower or "auth" in key_lower:
+                        if val_list:
+                            val = val_list[0].strip()
+                            if val.startswith("eyJ") or len(val) > 20:
+                                token = val
+                                break
+                
+                if not token and self.command == "POST":
+                    try:
+                        content_length = int(self.headers.get('Content-Length', 0))
+                        body = self.rfile.read(content_length).decode('utf-8')
+                        data = json.loads(body)
+                        if isinstance(data, dict):
+                            for k, v in data.items():
+                                k_lower = k.lower()
+                                if "token" in k_lower or "jwt" in k_lower or "auth" in k_lower:
+                                    if isinstance(v, str) and (v.startswith("eyJ") or len(v) > 20):
+                                        token = v
+                                        break
+                    except Exception:
+                        pass
+                
+                try:
+                    with open("server_debug.log", "a") as f:
+                        f.write(f"Extracted token: {token[:15] if token else 'None'}...\n")
+                except Exception:
+                    pass
+
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+                self.end_headers()
+                
+                html = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>WboxAI Login Complete</title>
+                    <style>
+                        body {
+                            background-color: #121824;
+                            color: #e2e8f0;
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            text-align: center;
+                            padding-top: 50px;
+                        }
+                        .container {
+                            max-width: 500px;
+                            margin: 0 auto;
+                            background-color: #1e293b;
+                            padding: 30px;
+                            border-radius: 12px;
+                            border: 1px solid #334155;
+                            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                        }
+                        h1 { color: #38bdf8; }
+                        p { font-size: 16px; color: #94a3b8; }
+                        .success-icon {
+                            font-size: 48px;
+                            color: #10b981;
+                            margin-bottom: 20px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="success-icon">&#10004;</div>
+                        <h1>Login Success!</h1>
+                        <p>Your authentication token was successfully transferred to the WboxAI Setup Wizard.</p>
+                        <p>You may now safely close this browser tab and return to the Setup Wizard.</p>
+                    </div>
+                </body>
+                </html>
+                """
+                self.wfile.write(html.encode("utf-8"))
+                
+                if token:
+                    origin = self.headers.get("Origin") or self.headers.get("Referer")
+                    base_url = "https://www.whitebox-learning.com"
+                    if origin:
+                        parsed_origin = urllib.parse.urlparse(origin)
+                        if parsed_origin.netloc:
+                            base_url = f"{parsed_origin.scheme}://{parsed_origin.netloc}"
+                    else:
+                        base_url = outer_self.detect_wbl_base_url()
+                    outer_self.token_received_signal.emit(token, base_url)
+            
+            def do_OPTIONS(self):
+                self.send_response(200)
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+                self.end_headers()
+
+        class IPv6HTTPServer(HTTPServer):
+            address_family = socket.AF_INET6
+
+        self.local_servers = []
+        self.server_threads = []
+        self.actual_port = port
+
+        # Find a port that is free on both IPv4 and IPv6 loopback
+        for p in range(port, port + 10):
+            ipv4_ok = False
+            ipv6_ok = False
+            
+            # Check IPv4
+            s4 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                s4.bind(("127.0.0.1", p))
+                ipv4_ok = True
+            except Exception:
+                pass
+            finally:
+                s4.close()
+                
+            # Check IPv6
+            s6 = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            try:
+                s6.bind(("::1", p))
+                ipv6_ok = True
+            except Exception:
+                pass
+            finally:
+                s6.close()
+                
+            if ipv4_ok and ipv6_ok:
+                self.actual_port = p
+                break
+        
+        # Start IPv4 server
+        try:
+            srv4 = HTTPServer(("127.0.0.1", self.actual_port), AuthHandler)
+            self.local_servers.append(srv4)
+            t4 = threading.Thread(target=srv4.serve_forever, daemon=True)
+            self.server_threads.append(t4)
+            t4.start()
+            print(f"Started IPv4 listener on 127.0.0.1:{self.actual_port}")
+        except Exception as e:
+            print(f"Failed to start IPv4 listener: {e}")
+            
+        # Start IPv6 server
+        try:
+            srv6 = IPv6HTTPServer(("::1", self.actual_port), AuthHandler)
+            self.local_servers.append(srv6)
+            t6 = threading.Thread(target=srv6.serve_forever, daemon=True)
+            self.server_threads.append(t6)
+            t6.start()
+            print(f"Started IPv6 listener on [::1]:{self.actual_port}")
+        except Exception as e:
+            print(f"Failed to start IPv6 listener: {e}")
+
+    def stop_local_auth_server(self):
+        if hasattr(self, "local_servers") and self.local_servers:
+            for srv in self.local_servers:
+                try:
+                    srv.shutdown()
+                    srv.server_close()
+                except Exception:
+                    pass
+            self.local_servers = []
+        if hasattr(self, "server_threads") and self.server_threads:
+            self.server_threads = []
+
+    def on_token_received(self, token, base_url):
+        try:
+            with open("server_debug.log", "a") as f:
+                f.write(f"on_token_received signal received in main thread with token: {token[:15]}... from {base_url}\n")
+        except Exception:
+            pass
+        self.stop_local_auth_server()
+        self.extract_and_sync_token(token, "External Browser Redirect", base_url)
+
+    def extract_and_sync_token(self, token, source, base_url="https://www.whitebox-learning.com"):
+        if hasattr(self, "_syncing_token") and self._syncing_token == token:
             return
         
-        self.web_status_label.setText("Syncing settings...")
-        self.on_sync_data_extracted({"jwt_token": token})
+        self._syncing_token = token
+        self.web_status_label.setText(f"Token acquired via {source}! Syncing from WBL backend ({base_url})...")
+        self.on_sync_data_extracted({"jwt_token": token, "base_url": base_url})
 
-    def fetch_data_from_wbl_backend(self, token):
+    def fetch_data_from_wbl_backend(self, token, base_url):
         import urllib.request
         import urllib.error
         import json
         import ssl
         
+        base_url_stripped = base_url.rstrip("/")
         endpoints = [
-            "https://www.whitebox-learning.com/api/candidate/sync",
-            "https://www.whitebox-learning.com/api/wbox-sync",
-            "https://www.whitebox-learning.com/api/wboxai/sync",
-            "https://www.whitebox-learning.com/api/candidate/profile",
-            "https://www.whitebox-learning.com/api/candidate/config",
+            f"{base_url_stripped}/api/candidate/sync",
+            f"{base_url_stripped}/api/wbox-sync",
+            f"{base_url_stripped}/api/wboxai/sync",
+            f"{base_url_stripped}/api/candidate/profile",
+            f"{base_url_stripped}/api/candidate/config",
+            f"{base_url_stripped}/api/candidate/resume",
+            f"{base_url_stripped}/api/candidate/llm-keys",
+            f"{base_url_stripped}/api/candidate/llm",
+            f"{base_url_stripped}/api/candidate/keys",
         ]
         
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         
+        combined_data = {}
+        
         for url in endpoints:
+            data_dict = None
             # Try GET request
             try:
                 req = urllib.request.Request(
@@ -702,33 +926,45 @@ class SetupWizard(QMainWindow):
                 with urllib.request.urlopen(req, context=ctx, timeout=8) as response:
                     if response.status == 200:
                         try:
-                            return json.loads(response.read().decode("utf-8"))
-                        except Exception:
-                            pass
+                            body = response.read().decode("utf-8")
+                            print(f"[Wbox Backend] GET {url} success: {body[:300]}...")
+                            data_dict = json.loads(body)
+                        except Exception as parse_err:
+                            print(f"[Wbox Backend] GET {url} json parse fail: {parse_err}")
             except Exception as e:
                 print(f"GET fetch from {url} failed: {e}")
                 
-            # Try POST request
-            try:
-                req = urllib.request.Request(
-                    url,
-                    data=b"{}",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    }
-                )
-                with urllib.request.urlopen(req, context=ctx, timeout=8) as response:
-                    if response.status == 200:
-                        try:
-                            return json.loads(response.read().decode("utf-8"))
-                        except Exception:
-                            pass
-            except Exception as e:
-                print(f"POST fetch from {url} failed: {e}")
+            # If GET failed or returned nothing, try POST
+            if not data_dict:
+                try:
+                    req = urllib.request.Request(
+                        url,
+                        data=b"{}",
+                        headers={
+                            "Authorization": f"Bearer {token}",
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        }
+                    )
+                    with urllib.request.urlopen(req, context=ctx, timeout=8) as response:
+                        if response.status == 200:
+                            try:
+                                body = response.read().decode("utf-8")
+                                print(f"[Wbox Backend] POST {url} success: {body[:300]}...")
+                                data_dict = json.loads(body)
+                            except Exception as parse_err:
+                                print(f"[Wbox Backend] POST {url} json parse fail: {parse_err}")
+                except Exception as e:
+                    print(f"POST fetch from {url} failed: {e}")
+            
+            if isinstance(data_dict, dict):
+                combined_data.update(data_dict)
+            elif isinstance(data_dict, list):
+                key_name = url.split('/')[-1]
+                combined_data[key_name] = data_dict
                 
-        return None
+        print(f"[Wbox Backend] Combined Sync Data Keys: {list(combined_data.keys())}")
+        return combined_data if combined_data else None
 
     def on_sync_data_extracted(self, result):
         if hasattr(self, "web_view") and self.web_view:
@@ -737,11 +973,12 @@ class SetupWizard(QMainWindow):
             result = {}
             
         token = result.get("jwt_token")
+        base_url = result.get("base_url", "https://www.whitebox-learning.com")
         backend_data = None
         
         if token:
-            self.web_status_label.setText("Token acquired! Syncing from WBL backend server...")
-            backend_data = self.fetch_data_from_wbl_backend(token)
+            self.web_status_label.setText(f"Token acquired! Syncing from WBL backend server ({base_url})...")
+            backend_data = self.fetch_data_from_wbl_backend(token, base_url)
             
         # Parse combined data (backend + fallback local storage)
         combined = {}
@@ -765,12 +1002,69 @@ class SetupWizard(QMainWindow):
         job_role = ""
         code_lang = ""
         
+        def parse_default_llm_keys(d):
+            nonlocal openai_key, gemini_key, claude_key
+            if isinstance(d, dict):
+                is_default = False
+                if "default" in d:
+                    def_val = str(d["default"]).lower()
+                    if def_val in ("true", "yes", "1", "default"):
+                        is_default = True
+                elif "is_default" in d:
+                    def_val = str(d["is_default"]).lower()
+                    if def_val in ("true", "yes", "1", "default"):
+                        is_default = True
+                        
+                provider = ""
+                if "provider" in d:
+                    provider = str(d["provider"]).lower()
+                elif "name" in d:
+                    provider = str(d["name"]).lower()
+                    
+                key_val = ""
+                if "key" in d:
+                    key_val = str(d["key"]).strip()
+                elif "api_key" in d:
+                    key_val = str(d["api_key"]).strip()
+                elif "value" in d:
+                    key_val = str(d["value"]).strip()
+                    
+                if is_default and key_val and not key_val.startswith("..."):
+                    if "openai" in provider or "open_ai" in provider:
+                        openai_key = key_val
+                    elif "gemini" in provider:
+                        gemini_key = key_val
+                    elif "claude" in provider or "anthropic" in provider:
+                        claude_key = key_val
+                        
+                for k, v in d.items():
+                    if isinstance(v, (dict, list)):
+                        parse_default_llm_keys(v)
+            elif isinstance(d, list):
+                for item in d:
+                    parse_default_llm_keys(item)
+
         def search_dict(d):
             nonlocal openai_key, gemini_key, claude_key, resume, job_role, code_lang
             if not isinstance(d, dict):
                 return
             for k, v in d.items():
                 k_lower = k.lower()
+                
+                # Check for resume keys
+                if "resume" in k_lower or "candidate_resume" in k_lower:
+                    if isinstance(v, (dict, list)):
+                        try:
+                            v_str = json.dumps(v, indent=2)
+                            if len(v_str) > len(resume):
+                                resume = v_str
+                        except Exception:
+                            pass
+                    elif isinstance(v, str):
+                        v_strip = v.strip()
+                        if len(v_strip) > len(resume):
+                            resume = v_strip
+                            
                 if isinstance(v, str):
                     v_strip = v.strip()
                     if "openai" in k_lower or "open_ai" in k_lower:
@@ -785,9 +1079,6 @@ class SetupWizard(QMainWindow):
                     elif v_strip.startswith("sk-") and not openai_key:
                         openai_key = v_strip
                         
-                    if "resume" in k_lower or "candidate_resume" in k_lower:
-                        if len(v_strip) > len(resume):
-                            resume = v_strip
                     if "role" in k_lower or "job" in k_lower:
                         if len(v_strip) < 100 and not job_role:
                             job_role = v_strip
@@ -804,6 +1095,7 @@ class SetupWizard(QMainWindow):
                             if item.strip().startswith("sk-") and not openai_key:
                                 openai_key = item.strip()
 
+        parse_default_llm_keys(combined)
         search_dict(combined)
         
         import re
@@ -825,15 +1117,6 @@ class SetupWizard(QMainWindow):
             
         if resume:
             self.config_data["resume_text"] = resume
-            try:
-                frozen = getattr(sys, "frozen", False)
-                exe_dir = Path(sys.executable).resolve().parent if frozen else Path(__file__).resolve().parent
-                (exe_dir / "resume_context.txt").write_text(resume, encoding="utf-8")
-                wboxai_app_dir = exe_dir / "wboxai_app"
-                if wboxai_app_dir.is_dir():
-                    (wboxai_app_dir / "resume_context.txt").write_text(resume, encoding="utf-8")
-            except Exception:
-                pass
 
         if openai_key or gemini_key or claude_key or resume:
             QMessageBox.information(
@@ -913,6 +1196,7 @@ class SetupWizard(QMainWindow):
 
     def update_navigation(self):
         idx = self.pages.currentIndex()
+        self.setFixedSize(620, 520)
         
         # Configure Back button visibility
         if self.config_only:
@@ -952,6 +1236,7 @@ class SetupWizard(QMainWindow):
 
     def prev_page(self):
         idx = self.pages.currentIndex()
+        self.stop_local_auth_server()
         if self.config_only and idx == 6:
             return # Don't go back past selection screen in config-only
         if self.first_time_setup and idx == 6:
@@ -1005,6 +1290,7 @@ class SetupWizard(QMainWindow):
             return
 
         if idx == 7: # Web Login page next button (fallback / skip)
+            self.stop_local_auth_server()
             self.pages.setCurrentIndex(2)
             self.update_navigation()
             return
@@ -1137,11 +1423,7 @@ class SetupWizard(QMainWindow):
             if wboxai_app_dir.is_dir():
                 (wboxai_app_dir / ".env").write_text("\n".join(env_lines), encoding="utf-8")
                 
-            intro_val = self.config_data.get("intro_text", "").strip()
-            if intro_val:
-                (exe_dir / "intro_context.txt").write_text(intro_val, encoding="utf-8")
-                if wboxai_app_dir.is_dir():
-                    (wboxai_app_dir / "intro_context.txt").write_text(intro_val, encoding="utf-8")
+            # (Intro text writing to file removed)
                 
             self.fin_desc.setText(
                 "Configuration settings saved successfully!\n\n"
@@ -1204,21 +1486,7 @@ class SetupWizard(QMainWindow):
             if wboxai_app_dir.is_dir():
                 (wboxai_app_dir / ".env").write_text("\n".join(env_lines), encoding="utf-8")
 
-            # Create default empty context files if they don't exist
-            intro_val = self.config_data.get("intro_text", "").strip() or "Enter details about yourself for introductions."
-            contexts = {
-                "resume_context.txt": "Paste your resume plain text here.",
-                "intro_context.txt": intro_val,
-                "project_overview.txt": "Add details of major projects you worked on."
-            }
-            for name, content in contexts.items():
-                p = exe_dir / name
-                if name == "intro_context.txt" or not p.is_file():
-                    p.write_text(content, encoding="utf-8")
-                if wboxai_app_dir.is_dir():
-                    p_wboxai = wboxai_app_dir / name
-                    if name == "intro_context.txt" or not p_wboxai.is_file():
-                        p_wboxai.write_text(content, encoding="utf-8")
+            # Removed generation of context text files per user request.
             
             # Create shortcuts if Windows
             if sys.platform == "win32":
@@ -1227,6 +1495,37 @@ class SetupWizard(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Save Failed", f"Could not write configuration settings:\n{e}")
             return False
+
+    def create_windows_shortcuts(self, target_path: Path):
+        try:
+            import os
+            import subprocess
+            desktop_path = Path(os.environ["USERPROFILE"]) / "Desktop" / "WboxAI.lnk"
+            start_menu_dir = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+            start_menu_dir.mkdir(parents=True, exist_ok=True)
+            start_shortcut = start_menu_dir / "WboxAI.lnk"
+
+            # Determine shortcut icon location
+            icon_location = target_path
+            ico_file = target_path.parent / "wboxai_app" / "logo.ico"
+            if ico_file.is_file():
+                icon_location = ico_file
+            elif (target_path.parent / "logo.ico").is_file():
+                icon_location = target_path.parent / "logo.ico"
+
+            for lnk in (desktop_path, start_shortcut):
+                # Executing powershell to create lnk natively
+                ps_cmd = f"""
+                $Shell = New-Object -ComObject WScript.Shell
+                $Shortcut = $Shell.CreateShortcut('{str(lnk)}')
+                $Shortcut.TargetPath = '{str(target_path)}'
+                $Shortcut.WorkingDirectory = '{str(target_path.parent)}'
+                $Shortcut.IconLocation = '{str(icon_location)}'
+                $Shortcut.Save()
+                """
+                subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True, check=True)
+        except Exception as shortcut_err:
+            print(f"Error creating shortcuts: {shortcut_err}")
 
     def launch_app(self):
         try:
